@@ -1,3 +1,6 @@
+# Desktop-dynamic-island
+A lightweight interactive system bar for Windows and Linux in the style of Apple Dynamic Island
+
 # Desktop Island
 
 Чёрная «чёлка» сверху экрана, как Dynamic Island на iPhone, только для Windows и Linux. В свёрнутом виде показывает время, играющий трек или таймер. Нажмите на неё, и откроется панель: музыка, Wi-Fi и Bluetooth, громкость, заметки, полка для файлов, уведомления.
