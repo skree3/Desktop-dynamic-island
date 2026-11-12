@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="common.css" />
+    <style>
+      .habit { display: flex; align-items: center; gap: 10px; padding: 7px 4px; border-radius: 10px; }
+      .habit:hover { background: rgba(255,255,255,.05); }
+      .check { width: 26px; height: 26px; border-radius: 50%; padding: 0; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+      .check.on { background: #3ccf91; border-color: transparent; color: #04140c; }
+      .days { display: flex; gap: 3px; }
+      .days i { width: 7px; height: 7px; border-radius: 2px; background: rgba(255,255,255,.12); }
+      .days i.on { background: #3ccf91; }
+      .del { background: none; border: none; color: #9a9aa2; padding: 2px 6px; visibility: hidden; }
+      .habit:hover .del { visibility: visible; }
+      form { margin-top: 8px; }
+    </style>
+    <script src="island-sdk.js"></script>
+  </head>
+  <body>
+    <div id="list"></div>
+    <form id="form" class="row">
+      <input id="name" class="grow" placeholder="Новая привычка, например «Вода 2 л»" maxlength="40" />
+      <button class="primary" type="submit">+</button>
+    </form>
+    <script src="main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "id": "builtin.pomodoro",
+  "name": "Помодоро",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "description": "Таймер фокуса: 25 минут работы, 5 минут отдыха. Оставшееся время видно в компактной панели.",
+  "author": "Desktop Island",
+  "entry": "index.html",
+  "permissions": ["notifications", "storage", "activity"],
+  "card": { "title": "Помодоро", "height": 220 },
+  "settings": [
+    { "key": "work", "type": "number", "label": "Работа, минут", "default": 25 },
+    { "key": "rest", "type": "number", "label": "Отдых, минут", "default": 5 },
+    { "key": "showInCompact", "type": "boolean", "label": "Показывать время в компактной панели", "default": true }
+  ]
+}

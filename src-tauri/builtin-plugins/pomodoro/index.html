@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="common.css" />
+    <style>
+      .phase { text-align: center; color: #9a9aa2; font-size: 12px; text-transform: uppercase; letter-spacing: .6px; }
+      .phase.work { color: #ff7a59; }
+      .phase.rest { color: #3ccf91; }
+      .time { text-align: center; font-size: 46px; font-weight: 300; font-variant-numeric: tabular-nums; margin: 2px 0 10px; }
+      .actions { display: flex; gap: 8px; justify-content: center; }
+      .actions button { min-width: 92px; }
+      .stats { text-align: center; margin-top: 10px; }
+    </style>
+    <script src="island-sdk.js"></script>
+  </head>
+  <body>
+    <div id="phase" class="phase">Готов к работе</div>
+    <div id="time" class="time">25:00</div>
+    <div class="actions">
+      <button id="toggle" class="primary">Старт</button>
+      <button id="skip">Пропустить</button>
+      <button id="reset">Сброс</button>
+    </div>
+    <div id="stats" class="stats muted"></div>
+    <script src="main.js"></script>
+  </body>
+</html>

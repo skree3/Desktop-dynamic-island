@@ -1,0 +1,180 @@
+//! Модуль уведомлений: получение уведомлений ОС (если система это позволяет)
+//! и передача их в Event Manager. Внутренние уведомления (таймеры, плагины,
+//! системные события Desktop Island) работают независимо от доступности API ОС.
+
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
+use tauri::AppHandle;
+
+use crate::core::state::Shared;
+use crate::core::task::TaskSlot;
+use crate::events::{names, IslandNotification, NotificationKind, Priority};
+use crate::logging::category;
+use crate::platform::types::{ListenerStatus, SystemNotification};
+
+#[derive(Default)]
+pub struct NotificationsModule {
+    task: TaskSlot,
+    status: Mutex<ListenerStatus>,
+    /// API недоступен — не повторяем попытки до явного запроса пользователя.
+    gave_up: AtomicBool,
+}
+
+fn convert(n: SystemNotification, show_body: bool) -> IslandNotification {
+    IslandNotification {
+        id: uuid::Uuid::new_v4().to_string(),
+        kind: NotificationKind::System,
+        source: format!("system:{}", n.key),
+        app_name: n.app_name,
+        icon: n.icon,
+        title: crate::util::clean_text(&n.title, 200),
+        body: if show_body { crate::util::clean_text(&n.body, 1000) } else { String::new() },
+        priority: Priority::Normal,
+        timestamp: if n.timestamp > 0 { n.timestamp } else { crate::database::now_ms() },
+        actions: vec![],
+        open_target: n.app_id,
+        duration_ms: 0,
+    }
+}
+
+impl NotificationsModule {
+    pub fn status(&self) -> ListenerStatus {
+        self.status.lock().unwrap_or_else(|p| p.into_inner()).clone()
+    }
+
+    fn set_status(&self, st: &Shared, s: ListenerStatus) {
+        *self.status.lock().unwrap_or_else(|p| p.into_inner()) = s.clone();
+        st.events.emit(names::NOTIFICATIONS_STATUS, s);
+    }
+
+    pub fn retry(&self, app: &AppHandle, st: &Shared) {
+        self.gave_up.store(false, Ordering::SeqCst);
+        self.task.stop();
+        crate::modules::reconcile(app, st);
+    }
+
+    fn deliver(st: &Shared, #[allow(unused_mut)] mut n: SystemNotification) {
+        // Linux: имя иконки темы (например, "telegram") → картинка.
+        #[cfg(target_os = "linux")]
+        if let Some(name) = n.icon.clone().filter(|i| !i.starts_with("data:")) {
+            let target = crate::platform::types::LaunchTarget::Uri { uri: String::new() };
+            n.icon = crate::platform::os::apps::icon(&target, Some(&name), 48).ok().flatten();
+        }
+        let show_body = st.with_settings(|s| s.notifications.show_body);
+        st.events.push(convert(n, show_body));
+    }
+
+    pub fn set_running(&self, app: &AppHandle, st: &Shared, run: bool) {
+        if !run {
+            if self.task.is_running() {
+                self.task.stop();
+            }
+            if !self.gave_up.load(Ordering::SeqCst) {
+                self.set_status(st, ListenerStatus { message: "Получение системных уведомлений отключено в настройках".into(), ..self.status() });
+            }
+            return;
+        }
+        if self.task.is_running() || self.gave_up.load(Ordering::SeqCst) {
+            return;
+        }
+        let _ = app;
+        let st = st.clone();
+        #[cfg(windows)]
+        self.task.start(async move {
+            use crate::platform::os::notifications as win;
+            let opened = tauri::async_runtime::spawn_blocking(win::open).await;
+            let mut listener = match opened {
+                Ok(Ok(l)) => l,
+                Ok(Err(status)) => {
+                    st.log.warn(category::INTEGRATION, "notifications", &status.message);
+                    st.notifications.gave_up.store(true, Ordering::SeqCst);
+                    st.notifications.set_status(&st, status);
+                    return;
+                }
+                Err(_) => return,
+            };
+            st.notifications.set_status(&st, listener.status());
+            let mut first = true;
+            loop {
+                let res = tauri::async_runtime::spawn_blocking(move || {
+                    let r = listener.poll(first);
+                    (listener, r)
+                })
+                .await;
+                let Ok((l, r)) = res else { return };
+                listener = l;
+                first = false;
+                match r {
+                    Ok(list) => {
+                        for n in list {
+                            Self::deliver(&st, n);
+                        }
+                    }
+                    Err(e) => st.log.warn(category::INTEGRATION, "notifications", format!("ошибка чтения уведомлений: {e}")),
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+            }
+        });
+        #[cfg(target_os = "linux")]
+        self.task.start(async move {
+            use crate::platform::os::notifications as lin;
+            let (tx, mut rx) = tokio::sync::mpsc::channel::<SystemNotification>(64);
+            let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
+            let monitor = tauri::async_runtime::spawn(lin::run(tx, ready_tx));
+            match ready_rx.await {
+                Ok(status) => {
+                    let ok = status.available;
+                    if !ok {
+                        st.log.warn(category::INTEGRATION, "notifications", &status.message);
+                        st.notifications.gave_up.store(true, Ordering::SeqCst);
+                    }
+                    st.notifications.set_status(&st, status);
+                    if !ok {
+                        return;
+                    }
+                }
+                Err(_) => return,
+            }
+            while let Some(n) = rx.recv().await {
+                Self::deliver(&st, n);
+            }
+            monitor.abort();
+        });
+    }
+
+    /// Обработка действий над уведомлением.
+    pub fn action(&self, app: &AppHandle, st: &Shared, notification_id: &str, action_id: &str) -> crate::core::error::AppResult<()> {
+        let n = st.events.find(notification_id).ok_or_else(|| crate::core::error::AppError::NotFound("уведомление не найдено".into()))?;
+        match (n.kind.clone(), action_id) {
+            (_, "dismiss") => {}
+            (NotificationKind::Timer, "restart") => {
+                if let Some(id) = n.source.strip_prefix("timer:") {
+                    st.timers.start(st, id)?;
+                }
+            }
+            (NotificationKind::Internal, "update") if n.source == "updater" => {
+                let (app, st) = (app.clone(), st.clone());
+                tauri::async_runtime::spawn_blocking(move || {
+                    if let Err(e) = crate::modules::updater::install_and_quit(&app, &st) {
+                        st.events.push(crate::events::internal_notification("updater", "Desktop Island", "Обновление не установлено", e.to_string(), Priority::High));
+                    }
+                });
+            }
+            (_, "open") => {
+                if let Some(target) = &n.open_target {
+                    crate::modules::applications::open_by_hint(st, target, &n.app_name)?;
+                } else {
+                    crate::modules::applications::open_by_hint(st, &n.app_name, &n.app_name)?;
+                }
+            }
+            (NotificationKind::Plugin, a) => {
+                if let Some(pid) = n.source.strip_prefix("plugin:") {
+                    st.plugins.forward_action(app, pid, &n.id, a);
+                }
+            }
+            _ => return Err(crate::core::error::AppError::unsupported("действие не поддерживается")),
+        }
+        st.events.dismiss(notification_id);
+        Ok(())
+    }
+}

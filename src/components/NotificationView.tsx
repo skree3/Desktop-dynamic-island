@@ -1,0 +1,56 @@
+// Отображение текущего уведомления из очереди Event Manager.
+
+import { Bell, ExternalLink, Hourglass, Puzzle, X } from "lucide-react";
+import { ipc } from "../services/ipc";
+import { useIsland } from "../stores/island";
+import type { IslandNotification } from "../types";
+import { formatTime } from "../utils/format";
+import { IconButton } from "./ui";
+
+function KindIcon({ n }: { n: IslandNotification }) {
+  if (n.icon && n.icon.startsWith("data:image/")) return <img className="notif-icon" src={n.icon} alt="" />;
+  const Icon = n.kind === "timer" ? Hourglass : n.kind === "plugin" ? Puzzle : Bell;
+  return (
+    <span className={`notif-icon placeholder prio-${n.priority}`}>
+      <Icon size={18} />
+    </span>
+  );
+}
+
+export function NotificationView({ n }: { n: IslandNotification }) {
+  const queued = useIsland((s) => s.notification.queued);
+  const canOpen = n.kind === "system";
+  return (
+    <div className="notif" onMouseEnter={() => ipc.notificationHold(n.id, true).catch(() => {})} onMouseLeave={() => ipc.notificationHold(n.id, false).catch(() => {})}>
+      <KindIcon n={n} />
+      <div className="notif-body">
+        <div className="notif-head">
+          <span className="notif-app">{n.appName}</span>
+          <span className="notif-time">{formatTime(n.timestamp)}</span>
+          {queued > 0 && <span className="badge">+{queued}</span>}
+        </div>
+        <div className="notif-title">{n.title}</div>
+        {n.body && <div className="notif-text">{n.body}</div>}
+        {n.actions.length > 0 && (
+          <div className="notif-actions">
+            {n.actions.map((a) => (
+              <button key={a.id} type="button" className="chip" onClick={() => ipc.notificationAction(n.id, a.id).catch(() => {})}>
+                {a.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="notif-side">
+        <IconButton size="sm" title="Закрыть" onClick={() => ipc.notificationDismiss(n.id)}>
+          <X size={14} />
+        </IconButton>
+        {canOpen && (
+          <IconButton size="sm" title="Открыть приложение" onClick={() => ipc.notificationAction(n.id, "open").catch(() => {})}>
+            <ExternalLink size={13} />
+          </IconButton>
+        )}
+      </div>
+    </div>
+  );
+}
