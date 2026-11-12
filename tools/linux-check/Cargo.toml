@@ -1,0 +1,24 @@
+# Проверка компиляции Linux-адаптеров с Windows-машины (без линковки и без GTK):
+#   rustup target add x86_64-unknown-linux-gnu
+#   cargo check --target x86_64-unknown-linux-gnu --manifest-path tools/linux-check/Cargo.toml
+# Подключает исходники src-tauri/src/platform/linux/* напрямую через #[path].
+[package]
+name = "linux-check"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+tauri = { path = "tauri-shim", package = "tauri-shim" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }
+tracing = "0.1"
+thiserror = "2"
+base64 = "0.22"
+png = "0.17"
+zbus = { version = "5", default-features = false, features = ["tokio"] }
+x11rb = { version = "0.13", default-features = false }
+futures-util = { version = "0.3", default-features = false, features = ["std"] }

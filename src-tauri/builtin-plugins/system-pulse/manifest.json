@@ -1,0 +1,17 @@
+{
+  "id": "builtin.system-pulse",
+  "name": "System Pulse",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "minAppVersion": "0.1.0",
+  "description": "Загрузка процессора и памяти, счётчик нажатий, уведомление по кнопке. Заодно — пример того, как пишутся плагины.",
+  "author": "Desktop Island",
+  "entry": "index.html",
+  "permissions": ["system.read", "notifications", "storage", "activity"],
+  "card": { "title": "System Pulse", "height": 200 },
+  "settings": [
+    { "key": "greeting", "type": "string", "label": "Текст приветствия", "default": "Привет из плагина!" },
+    { "key": "interval", "type": "select", "label": "Обновление", "default": "5 с", "options": ["2 с", "5 с", "10 с"] },
+    { "key": "showActivity", "type": "boolean", "label": "Показывать CPU в компактной панели", "default": false }
+  ]
+}

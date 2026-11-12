@@ -1,0 +1,28 @@
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+
+const host = process.env.TAURI_DEV_HOST;
+
+// Vite настроен под Tauri: фиксированный порт, без очистки консоли,
+// отдельные чанки для окна настроек и карточек (ленивая загрузка).
+export default defineConfig({
+  plugins: [react()],
+  clearScreen: false,
+  server: {
+    port: 1420,
+    strictPort: true,
+    host: host || "127.0.0.1",
+    hmr: host ? { protocol: "ws", host, port: 1421 } : undefined,
+    watch: { ignored: ["**/src-tauri/**"] },
+  },
+  envPrefix: ["VITE_", "TAURI_ENV_*"],
+  build: {
+    target: "es2022",
+    sourcemap: false,
+    chunkSizeWarningLimit: 600,
+  },
+  test: {
+    environment: "node",
+    include: ["src/**/*.test.ts", "tests/**/*.test.ts"],
+  },
+} as any);

@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="style.css" />
+    <script src="island-sdk.js"></script>
+  </head>
+  <body>
+    <div class="row">
+      <div class="gauge"><span id="cpu">—</span><small>CPU</small></div>
+      <div class="gauge"><span id="ram">—</span><small>RAM</small></div>
+      <div class="gauge"><span id="clicks">0</span><small>нажатий</small></div>
+    </div>
+    <div class="actions">
+      <button id="hello">Уведомление</button>
+      <button id="count">+1</button>
+    </div>
+    <div id="status" class="muted"></div>
+    <script src="main.js"></script>
+  </body>
+</html>

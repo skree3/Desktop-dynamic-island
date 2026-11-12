@@ -1,0 +1,11 @@
+{
+  "id": "builtin.habits",
+  "name": "Привычки",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "description": "Отмечайте полезные привычки каждый день и следите за сериями.",
+  "author": "Desktop Island",
+  "entry": "index.html",
+  "permissions": ["storage"],
+  "card": { "title": "Привычки", "height": 320 }
+}
