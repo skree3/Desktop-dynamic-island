@@ -1,6 +1,6 @@
 [package]
 name = "desktop-island"
-version = "0.2.0"
+version = "0.2.1"
 description = "Desktop Island — интерактивная системная панель для Windows и Linux"
 edition = "2021"
 rust-version = "1.80"

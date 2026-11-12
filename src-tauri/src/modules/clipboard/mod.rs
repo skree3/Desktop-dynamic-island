@@ -60,7 +60,10 @@ fn hash_of(kind: &str, data: &[u8]) -> String {
 }
 
 fn read_clipboard(store_images: bool, store_files: bool) -> Option<Captured> {
-    let mut cb = arboard::Clipboard::new().ok()?;
+    crate::util::clipboard::with(|cb| read_from(cb, store_images, store_files)).ok().flatten()
+}
+
+fn read_from(cb: &mut arboard::Clipboard, store_images: bool, store_files: bool) -> Option<Captured> {
     if store_files {
         if let Ok(files) = cb.get().file_list() {
             if !files.is_empty() {
@@ -238,12 +241,12 @@ impl ClipboardModule {
             })
             .map_err(|_| AppError::NotFound("запись не найдена".into()))?;
         *self.own_hash.lock().unwrap_or_else(|p| p.into_inner()) = Some(hash);
-        let mut cb = arboard::Clipboard::new().map_err(|e| AppError::system(format!("буфер обмена недоступен: {e}")))?;
+        let sys = |e: arboard::Error| AppError::system(e.to_string());
         match kind.as_str() {
-            "text" => cb.set_text(content).map_err(|e| AppError::system(e.to_string()))?,
+            "text" => crate::util::clipboard::with(|cb| cb.set_text(content))?.map_err(sys)?,
             "files" => {
                 let files: Vec<String> = serde_json::from_str(&content)?;
-                cb.set().file_list(&files).map_err(|e| AppError::system(e.to_string()))?
+                crate::util::clipboard::with(|cb| cb.set().file_list(&files))?.map_err(sys)?
             }
             "image" => {
                 let png = image.ok_or_else(|| AppError::NotFound("изображение отсутствует".into()))?;
@@ -252,8 +255,8 @@ impl ClipboardModule {
                 let mut buf = vec![0; reader.output_buffer_size()];
                 let info = reader.next_frame(&mut buf).map_err(|e| AppError::system(e.to_string()))?;
                 buf.truncate(info.buffer_size());
-                cb.set_image(arboard::ImageData { width: info.width as usize, height: info.height as usize, bytes: buf.into() })
-                    .map_err(|e| AppError::system(e.to_string()))?
+                let img = arboard::ImageData { width: info.width as usize, height: info.height as usize, bytes: buf.into() };
+                crate::util::clipboard::with(|cb| cb.set_image(img))?.map_err(sys)?
             }
             _ => return Err(AppError::invalid("неизвестный тип записи")),
         }

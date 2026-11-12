@@ -1,3 +1,4 @@
+pub mod clipboard;
 pub mod image;
 
 use crate::core::error::{AppError, AppResult};

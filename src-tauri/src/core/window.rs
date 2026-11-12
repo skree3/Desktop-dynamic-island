@@ -87,7 +87,10 @@ fn target_monitor(app: &AppHandle, st: &AppState) -> Option<Monitor> {
 fn set_bounds(win: &WebviewWindow, x: i32, y: i32, w: u32, h: u32) {
     IGNORE_MOVES_UNTIL.store(now_ms() + 400, Ordering::SeqCst);
     if !crate::platform::os::window::set_bounds(win, x, y, w, h) {
-        let _ = win.set_size(PhysicalSize::new(w, h));
+        // GTK не принимает нулевой размер (gtk_window_resize: assertion 'width > 0').
+        if w > 0 && h > 0 {
+            let _ = win.set_size(PhysicalSize::new(w, h));
+        }
         let _ = win.set_position(PhysicalPosition::new(x, y));
     }
 }
@@ -108,7 +111,11 @@ pub fn apply_position(app: &AppHandle, st: &AppState) {
     let Some(m) = target_monitor(app, st) else { return };
     let key = monitor_key(&m);
     let placement = st.with_settings(|s| s.position.placements.get(&key).copied().unwrap_or_default());
-    let size = win.outer_size().unwrap_or(PhysicalSize::new(240, 48));
+    // В Linux до первой отрисовки окна outer_size() возвращает 0×0.
+    let size = win.outer_size().ok().filter(|s| s.width > 0 && s.height > 0).unwrap_or_else(|| {
+        let scale = m.scale_factor();
+        PhysicalSize::new((240.0 * scale).round() as u32, (52.0 * scale).round() as u32)
+    });
     let (x, y) = compute(&m, placement, size.width, size.height);
     set_bounds(&win, x, y, size.width, size.height);
     emit_attached(app, y <= m.position().y);

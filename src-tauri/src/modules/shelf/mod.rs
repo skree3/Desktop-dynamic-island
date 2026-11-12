@@ -126,6 +126,5 @@ pub fn copy(st: &Shared, ids: &[i64]) -> AppResult<()> {
     if paths.is_empty() {
         return Err(AppError::NotFound("файлы не найдены".into()));
     }
-    let mut cb = arboard::Clipboard::new().map_err(|e| AppError::system(format!("буфер обмена недоступен: {e}")))?;
-    cb.set().file_list(&paths).map_err(|e| AppError::system(e.to_string()))
+    crate::util::clipboard::with(|cb| cb.set().file_list(&paths))?.map_err(|e| AppError::system(e.to_string()))
 }
