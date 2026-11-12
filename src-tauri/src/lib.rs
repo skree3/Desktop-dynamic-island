@@ -40,6 +40,11 @@ fn handle_cli(app: &tauri::AppHandle, args: &[String]) {
         crate::core::hotkeys::run_action(app, &st, "toggle_dnd");
     } else if args.iter().any(|a| a == "--play-pause") {
         crate::core::hotkeys::run_action(app, &st, "media_play_pause");
+    } else if args.iter().any(|a| a == "--screenshot") {
+        let st2 = st.clone();
+        tauri::async_runtime::spawn(async move {
+            let _ = crate::modules::shelf::screenshot::capture(st2).await;
+        });
     } else {
         window::open_settings(app, None);
     }
@@ -98,9 +103,12 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             st.flags.island_visible.store(false, Ordering::SeqCst);
         }
         // Окно показывается фронтендом после первой отрисовки (без белой вспышки).
+        window::show_if_frontend_silent(&handle, &st);
     }
 
     window::start_monitor_watch(&handle, &st);
+    #[cfg(windows)]
+    modules::shelf::start_drop_guard(&handle);
     modules::reconcile(&handle, &st);
 
     if let Some(w) = db.status.warning.clone() {
@@ -163,6 +171,15 @@ pub fn run() {
             let app = window.app_handle();
             match event {
                 WindowEvent::Moved(_) => window::on_island_moved(app),
+                WindowEvent::DragDrop(ev) => modules::shelf::on_drag_drop(app, ev),
+                // «Показать рабочий стол» (Win+D) сворачивает и остров — сразу возвращаем его.
+                WindowEvent::Resized(_) if window.is_minimized().unwrap_or(false) => {
+                    let st = core::state::shared(app);
+                    if st.island_visible() {
+                        let _ = window.unminimize();
+                        let _ = window.set_always_on_top(true);
+                    }
+                }
                 WindowEvent::ScaleFactorChanged { .. } => {
                     let st = core::state::shared(app);
                     window::apply_position(app, &st);

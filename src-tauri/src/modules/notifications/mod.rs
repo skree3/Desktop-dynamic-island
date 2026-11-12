@@ -8,9 +8,12 @@ use tauri::AppHandle;
 
 use crate::core::state::Shared;
 use crate::core::task::TaskSlot;
-use crate::events::{names, IslandNotification, NotificationKind, Priority};
+use crate::events::{names, IslandNotification, NotificationKind, Priority, PushOutcome};
 use crate::logging::category;
 use crate::platform::types::{ListenerStatus, SystemNotification};
+
+#[cfg(windows)]
+mod unread;
 
 #[derive(Default)]
 pub struct NotificationsModule {
@@ -18,6 +21,16 @@ pub struct NotificationsModule {
     status: Mutex<ListenerStatus>,
     /// API недоступен — не повторяем попытки до явного запроса пользователя.
     gave_up: AtomicBool,
+    /// Linux: токен скрытых всплывающих уведомлений окружения (см. platform::linux::banners).
+    #[cfg(target_os = "linux")]
+    popups: Mutex<Option<String>>,
+}
+
+/// Уведомления безопасности Windows всегда остаются системными.
+#[allow(dead_code)]
+fn protected_app(app: &str) -> bool {
+    let a = app.to_lowercase();
+    ["безопасность", "security", "defender", "защитник"].iter().any(|k| a.contains(k))
 }
 
 fn convert(n: SystemNotification, show_body: bool) -> IslandNotification {
@@ -53,7 +66,51 @@ impl NotificationsModule {
         crate::modules::reconcile(app, st);
     }
 
-    fn deliver(st: &Shared, #[allow(unused_mut)] mut n: SystemNotification) {
+    /// Linux: прячет или возвращает всплывающие уведомления окружения рабочего стола.
+    /// Прежнее состояние хранится в файле — после сбоя оно восстанавливается при запуске.
+    /// В Windows баннеры убирает цикл опроса, здесь ничего делать не нужно.
+    pub fn sync_popups(&self, st: &Shared, desired: bool) {
+        #[cfg(target_os = "linux")]
+        {
+            use crate::platform::linux::banners;
+            let backup = st.paths.data.join("popups-backup.txt");
+            let mut g = self.popups.lock().unwrap_or_else(|p| p.into_inner());
+            if g.is_none() {
+                if let Ok(token) = std::fs::read_to_string(&backup) {
+                    // Блокировка KDE умерла вместе с прошлым процессом — восстанавливать нечего.
+                    if token.trim() == "kde" {
+                        let _ = std::fs::remove_file(&backup);
+                    } else {
+                        *g = Some(token.trim().to_string());
+                    }
+                }
+            }
+            match (desired, g.clone()) {
+                (true, None) => {
+                    if let Some(token) = banners::hide_popups() {
+                        let _ = std::fs::write(&backup, &token);
+                        *g = Some(token);
+                    }
+                }
+                (false, Some(token)) => {
+                    banners::restore(&token);
+                    let _ = std::fs::remove_file(&backup);
+                    *g = None;
+                }
+                _ => {}
+            }
+        }
+        #[cfg(not(target_os = "linux"))]
+        let _ = (st, desired);
+    }
+
+    /// «Только в острове» действует, пока остров виден (скрыл его пользователь —
+    /// уведомления снова показывает система).
+    pub fn island_only_active(&self, st: &Shared) -> bool {
+        st.with_settings(|s| s.notifications.island_only) && st.island_visible()
+    }
+
+    fn deliver(st: &Shared, #[allow(unused_mut)] mut n: SystemNotification) -> PushOutcome {
         // Linux: имя иконки темы (например, "telegram") → картинка.
         #[cfg(target_os = "linux")]
         if let Some(name) = n.icon.clone().filter(|i| !i.starts_with("data:")) {
@@ -61,7 +118,7 @@ impl NotificationsModule {
             n.icon = crate::platform::os::apps::icon(&target, Some(&name), 48).ok().flatten();
         }
         let show_body = st.with_settings(|s| s.notifications.show_body);
-        st.events.push(convert(n, show_body));
+        st.events.push(convert(n, show_body))
     }
 
     pub fn set_running(&self, app: &AppHandle, st: &Shared, run: bool) {
@@ -83,36 +140,60 @@ impl NotificationsModule {
         self.task.start(async move {
             use crate::platform::os::notifications as win;
             let opened = tauri::async_runtime::spawn_blocking(win::open).await;
+            // Без доступа к центру уведомлений продолжаем работать: счётчик
+            // непрочитанных Telegram читается из заголовка окна и без него.
             let mut listener = match opened {
-                Ok(Ok(l)) => l,
+                Ok(Ok(l)) => {
+                    st.notifications.set_status(&st, l.status());
+                    Some(l)
+                }
                 Ok(Err(status)) => {
                     st.log.warn(category::INTEGRATION, "notifications", &status.message);
-                    st.notifications.gave_up.store(true, Ordering::SeqCst);
                     st.notifications.set_status(&st, status);
-                    return;
+                    None
                 }
                 Err(_) => return,
             };
-            st.notifications.set_status(&st, listener.status());
+            let mut tracker = self::unread::Tracker::default();
             let mut first = true;
             loop {
+                // «Только в острове»: уведомление показывается в острове и сразу убирается
+                // из Windows — вместе с ним исчезает и всплывающий баннер.
+                let island_only = st.notifications.island_only_active(&st);
+                let st2 = st.clone();
                 let res = tauri::async_runtime::spawn_blocking(move || {
-                    let r = listener.poll(first);
-                    (listener, r)
+                    let now = crate::database::now_ms();
+                    let mut err = None;
+                    match listener.as_mut().map(|l| l.poll(first)) {
+                        Some(Ok(list)) => {
+                            for n in list {
+                                tracker.native(&n.app_name, now);
+                                let (key, app) = (n.key.clone(), n.app_name.clone());
+                                let outcome = Self::deliver(&st2, n);
+                                if island_only && !matches!(outcome, PushOutcome::Dropped(_)) && !protected_app(&app) {
+                                    if let Some(l) = listener.as_ref() {
+                                        let _ = l.remove(&key);
+                                    }
+                                }
+                            }
+                        }
+                        Some(Err(e)) => err = Some(e.to_string()),
+                        None => {}
+                    }
+                    for n in tracker.update(crate::platform::os::unread::scan(), now) {
+                        Self::deliver(&st2, n);
+                    }
+                    (listener, tracker, err)
                 })
                 .await;
-                let Ok((l, r)) = res else { return };
-                listener = l;
+                let Ok((l, t, err)) = res else { return };
+                (listener, tracker) = (l, t);
                 first = false;
-                match r {
-                    Ok(list) => {
-                        for n in list {
-                            Self::deliver(&st, n);
-                        }
-                    }
-                    Err(e) => st.log.warn(category::INTEGRATION, "notifications", format!("ошибка чтения уведомлений: {e}")),
+                if let Some(e) = err {
+                    st.log.warn(category::INTEGRATION, "notifications", format!("ошибка чтения уведомлений: {e}"));
                 }
-                tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+                // В режиме «только в острове» проверяем чаще, чтобы баннер не успел показаться.
+                tokio::time::sleep(std::time::Duration::from_millis(if island_only { 300 } else { 1500 })).await;
             }
         });
         #[cfg(target_os = "linux")]
@@ -159,6 +240,9 @@ impl NotificationsModule {
                         st.events.push(crate::events::internal_notification("updater", "Desktop Island", "Обновление не установлено", e.to_string(), Priority::High));
                     }
                 });
+            }
+            (NotificationKind::Internal, a) if n.source.starts_with("download:") => {
+                crate::modules::downloads::action(st, &n.source, a)?;
             }
             (_, "open") => {
                 if let Some(target) = &n.open_target {

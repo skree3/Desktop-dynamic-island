@@ -456,6 +456,53 @@ pub async fn shelf_command(state: State<'_, Shared>, id: Option<i64>, ids: Optio
     .await
 }
 
+#[tauri::command]
+pub async fn shelf_drag_out(app: AppHandle, state: State<'_, Shared>, ids: Vec<i64>) -> AppResult<()> {
+    require(&state, "shelf")?;
+    let st = state.inner().clone();
+    blocking(move || crate::modules::shelf::drag_out(&app, &st, &ids)).await
+}
+
+#[tauri::command]
+pub async fn screenshot_region(state: State<'_, Shared>) -> AppResult<bool> {
+    require(&state, "shelf")?;
+    crate::modules::shelf::screenshot::capture(state.inner().clone()).await
+}
+
+// ---- микрофон, камера, звонки ----
+
+#[tauri::command]
+pub async fn privacy_state(state: State<'_, Shared>) -> AppResult<crate::modules::privacy::PrivacyState> {
+    Ok(state.privacy.state())
+}
+
+#[tauri::command]
+pub async fn mic_toggle(state: State<'_, Shared>) -> AppResult<bool> {
+    let st = state.inner().clone();
+    blocking(move || st.privacy.toggle_mic(&st)).await
+}
+
+#[tauri::command]
+pub async fn call_open(state: State<'_, Shared>) -> AppResult<()> {
+    state.privacy.open_call(state.inner())
+}
+
+// ---- тексты песен ----
+
+#[tauri::command]
+pub async fn lyrics_get(
+    state: State<'_, Shared>,
+    artist: String,
+    title: String,
+    album: Option<String>,
+    duration_ms: Option<u64>,
+) -> AppResult<Option<crate::modules::music::lyrics::Lyrics>> {
+    if !state.with_settings(|s| s.modules.music && s.music.lyrics) {
+        return Ok(None);
+    }
+    blocking(move || crate::modules::music::lyrics::fetch(&artist, &title, album.as_deref().unwrap_or(""), duration_ms)).await
+}
+
 // ---- обновления ----
 
 #[tauri::command]

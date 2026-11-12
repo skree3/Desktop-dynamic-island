@@ -10,7 +10,7 @@ import { useIsland } from "../stores/island";
 import { useMedia } from "../stores/media";
 import { useSys } from "../stores/sysmon";
 import { useTimers } from "../stores/timers";
-import type { Activity, GameModeState, MediaSession, NotificationPayload, SysSnapshot, Timer } from "../types";
+import type { Activity, GameModeState, MediaSession, NotificationPayload, PrivacyState, SysSnapshot, Timer } from "../types";
 import "../styles/island.css";
 
 export default function IslandApp() {
@@ -27,6 +27,8 @@ export default function IslandApp() {
     unsubs.push(on<MediaSession[]>(events.MEDIA_SESSIONS, (s) => useMedia.getState().setSessions(s)));
     unsubs.push(on<Timer[]>(events.TIMERS_CHANGED, (t) => useTimers.getState().set(t)));
     unsubs.push(on<boolean>("island://attached", (a) => useIsland.getState().setAttached(a)));
+    unsubs.push(on<PrivacyState>("privacy://state", (p) => useIsland.getState().setPrivacy(p)));
+    ipc.privacyState().then((p) => useIsland.getState().setPrivacy(p)).catch(() => {});
     ipc.islandAttached().then((a) => useIsland.getState().setAttached(a)).catch(() => {});
     unsubs.push(
       on<SysSnapshot>(events.SYSMON_SNAPSHOT, (s) => useSys.getState().push(s, useApp.getState().settings?.systemMonitor.historyPoints ?? 60)),
@@ -51,9 +53,22 @@ export default function IslandApp() {
         if (app.settings?.modules.music) ipc.mediaSessions().then((s) => useMedia.getState().setSessions(s)).catch(() => {});
         if (app.settings?.modules.timers) useTimers.getState().load();
         // Показываем окно только после первой отрисовки — без белой вспышки.
-        requestAnimationFrame(() => ipc.islandReady().catch(() => {}));
+        // WebKitGTK (Linux) не вызывает requestAnimationFrame, пока окно скрыто,
+        // поэтому дублируем таймером — иначе окно так и не появится.
+        let sent = false;
+        const ready = () => {
+          if (sent) return;
+          sent = true;
+          ipc.islandReady().catch(() => {});
+        };
+        requestAnimationFrame(ready);
+        setTimeout(ready, 250);
       })
-      .catch((e) => console.error("bootstrap failed", e));
+      .catch((e) => {
+        console.error("bootstrap failed", e);
+        // Даже при ошибке загрузки окно должно появиться, чтобы было видно, что не так.
+        ipc.islandReady().catch(() => {});
+      });
 
     return () => {
       unsubs.forEach((p) => p.then((u) => u()));

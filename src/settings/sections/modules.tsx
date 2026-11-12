@@ -14,6 +14,8 @@ const EXTRA_MODULES: { id: ModuleId; label: string; desc: string }[] = [
   { id: "brightness", label: "Яркость", desc: "Регулировка яркости дисплеев" },
   { id: "power", label: "Выключение и перезагрузка", desc: "Кнопки в быстрых настройках (с подтверждением)" },
   { id: "battery", label: "Зарядка и низкий заряд", desc: "Анимация при подключении зарядки и предупреждения при 20% и 10%" },
+  { id: "privacy", label: "Микрофон, камера и звонки", desc: "Точки, когда приложение использует микрофон или камеру; звонок с длительностью и кнопкой микрофона" },
+  { id: "downloads", label: "Загрузки", desc: "Скачиваемый файл и скорость в острове, уведомление по окончании" },
 ];
 
 export function CardsSection() {
@@ -109,6 +111,12 @@ export function NotificationsSection() {
         </Field>
         <Field label="Получать уведомления других приложений" description={status.data ? `${status.data.backend}: ${status.data.message}` : "Проверка…"}>
           <Toggle checked={n.listenSystem} onChange={(v) => set({ listenSystem: v })} />
+        </Field>
+        <Field
+          label="Только в острове"
+          description="Системные всплывающие окна не показываются: уведомление приходит только в остров. Если скрыть остров или выйти из программы, система снова показывает уведомления сама."
+        >
+          <Toggle checked={n.islandOnly} disabled={!n.listenSystem} onChange={(v) => set({ islandOnly: v })} />
         </Field>
         {status.data && !status.data.available && (
           <Note kind="warn">
@@ -234,6 +242,9 @@ export function MusicSection() {
         </Field>
         <Field label="Показывать трек в компактной панели">
           <Toggle checked={m.showInCompact} onChange={(v) => set({ showInCompact: v })} />
+        </Field>
+        <Field label="Текст песни в свёрнутом острове" description="Строка песни вместо названия трека. Исполнитель и название отправляются в открытую базу lrclib.net.">
+          <Toggle checked={m.lyrics} onChange={(v) => set({ lyrics: v })} />
         </Field>
         <Field label="Частота опроса медиасессий" description="События отправляются в интерфейс только при изменении трека или статуса.">
           <NumberInput value={m.pollIntervalMs} min={500} max={5000} step={100} suffix="мс" onChange={(v) => set({ pollIntervalMs: v })} />

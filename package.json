@@ -1,7 +1,7 @@
 {
   "name": "desktop-island",
   "private": true,
-  "version": "0.2.1",
+  "version": "0.3.0",
   "type": "module",
   "description": "Desktop Island — интерактивная системная панель для Windows и Linux",
   "scripts": {

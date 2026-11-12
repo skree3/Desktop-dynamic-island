@@ -64,6 +64,19 @@ pub fn run() {
         Err(s) => s,
     });
     #[cfg(windows)]
+    check("notifications::poll (центр уведомлений)", || {
+        os::notifications::open().map_err(|s| s.message).and_then(|mut l| {
+            l.poll(false)
+                // Только имена приложений: текст уведомлений в отчёт не попадает.
+                .map(|v| v.into_iter().map(|n| format!("{} (icon={})", n.app_name, n.icon.is_some())).collect::<Vec<_>>())
+                .map_err(|e| e.to_string())
+        })
+    });
+    #[cfg(windows)]
+    check("unread::scan (счётчик Telegram в заголовке)", || {
+        os::unread::scan().into_iter().map(|u| (u.app, u.count, u.foreground)).collect::<Vec<_>>()
+    });
+    #[cfg(windows)]
     check("gpu::PdhGpu", || {
         let mut g = os::gpu::PdhGpu::new()?;
         std::thread::sleep(Duration::from_millis(500));

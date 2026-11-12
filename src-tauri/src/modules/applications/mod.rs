@@ -37,6 +37,8 @@ pub struct AppsModule {
     index: Mutex<Option<(Instant, Arc<Vec<InstalledApp>>)>>,
     icons: Mutex<(HashMap<String, Option<String>>, VecDeque<String>)>,
     scanning: tokio::sync::Mutex<()>,
+    /// Поколение анимации запуска: старый таймер не гасит новую анимацию.
+    launch_gen: std::sync::atomic::AtomicU64,
 }
 
 fn score(name: &str, keywords: &[String], q: &str) -> Option<i32> {
@@ -194,10 +196,39 @@ impl AppsModule {
         let target = entry.target.clone();
         let res = tauri::async_runtime::spawn_blocking(move || os::apps::launch(&target)).await?;
         match &res {
-            Ok(_) => tracing::info!(app = %entry.name, "приложение запущено"),
+            Ok(_) => {
+                tracing::info!(app = %entry.name, "приложение запущено");
+                self.launch_animation(st, id, &entry.name).await;
+            }
             Err(e) => st.log.warn(crate::logging::category::INTEGRATION, "apps", format!("не удалось запустить «{}»: {e}", entry.name)),
         }
         res
+    }
+
+    /// Анимация запуска в острове: иконка приложения «вылетает» из свёрнутой панели.
+    async fn launch_animation(&self, st: &Shared, id: &str, name: &str) {
+        use crate::events::{Activity, Priority};
+        use std::sync::atomic::Ordering;
+        let gen = self.launch_gen.fetch_add(1, Ordering::SeqCst) + 1;
+        let icon = self.icon(st, id).await.ok().flatten();
+        st.events.set_activity(Activity {
+            id: "launch".into(),
+            kind: "launch".into(),
+            priority: Priority::Critical,
+            title: name.to_string(),
+            subtitle: Some("Открывается…".into()),
+            icon,
+            progress: None,
+            updated_at: crate::database::now_ms(),
+            started_at: None,
+        });
+        let st = st.clone();
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(1800)).await;
+            if st.apps.launch_gen.load(Ordering::SeqCst) == gen {
+                st.events.clear_activity("launch");
+            }
+        });
     }
 
     pub fn clear_icon_cache(&self) {

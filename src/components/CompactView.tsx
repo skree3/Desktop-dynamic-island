@@ -1,15 +1,17 @@
 // Компактное состояние: самая приоритетная активность (таймер, музыка, плагин) или часы.
 
 import { memo, useEffect } from "react";
-import { Battery, BatteryCharging, BellOff, Cpu, Hourglass, Music2, Puzzle, Timer as TimerIcon } from "lucide-react";
+import { ArrowDownToLine, Battery, BatteryCharging, BellOff, Cpu, ExternalLink, Hourglass, Mic, MicOff, Music2, Phone, Puzzle, Rocket, Timer as TimerIcon } from "lucide-react";
 import { useNow } from "../hooks/common";
+import { currentLine, useLyrics } from "../hooks/useLyrics";
+import { ipc } from "../services/ipc";
 import { useApp } from "../stores/app";
 import { useIsland } from "../stores/island";
 import { currentSession, useMedia } from "../stores/media";
 import { useSys } from "../stores/sysmon";
 import { timerElapsed, timerRemaining, useTimers } from "../stores/timers";
 import type { Activity } from "../types";
-import { formatClock } from "../utils/format";
+import { formatClock, mediaPosition } from "../utils/format";
 
 function Bars({ playing }: { playing: boolean }) {
   return (
@@ -28,21 +30,104 @@ const MusicCompact = memo(function MusicCompact() {
   const artwork = useMedia((s) => s.artwork);
   const showArt = useApp((s) => s.settings?.music.showArtwork);
   const s = currentSession(sessions, selected);
+  const lyrics = useLyrics(s);
+  const playing = s?.status === "playing";
+  // Пока есть синхронный текст и трек играет — обновляем строку 4 раза в секунду.
+  const now = useNow(250, !!lyrics && playing);
   useEffect(() => {
     if (s && showArt) useMedia.getState().loadArtwork(s);
   }, [s?.artworkKey, showArt]);
   if (!s) return <Clock />;
   const art = artwork[s.artworkKey];
+  const line = lyrics && playing ? currentLine(lyrics.lines, mediaPosition(s.positionMs, s.positionUpdatedAt, playing, s.durationMs, now) + 250) : null;
   return (
     <div className="compact-row">
       {showArt && art ? <img className="compact-art" src={art} alt="" draggable={false} /> : <span className="compact-icon"><Music2 size={15} /></span>}
       <div className="compact-text marquee">
-        <span>{s.title || s.appName}</span>
+        {line ? (
+          <span className="lyric-line" key={line} title={s.title}>
+            {line}
+          </span>
+        ) : (
+          <span>{s.title || s.appName}</span>
+        )}
       </div>
-      <Bars playing={s.status === "playing"} />
+      <Bars playing={playing} />
     </div>
   );
 });
+
+/** Идёт звонок: приложение, длительность, микрофон и переход в приложение. */
+function CallCompact({ activity }: { activity: Activity }) {
+  const now = useNow(1000);
+  const muted = useIsland((s) => s.privacy.micMuted);
+  const elapsed = activity.startedAt ? Math.max(0, now - activity.startedAt) : 0;
+  return (
+    <div className="compact-row call-compact">
+      <span className="call-icon">
+        {activity.icon ? <img src={activity.icon} alt="" draggable={false} /> : <Phone size={14} />}
+        <i className="call-pulse" />
+      </span>
+      <div className="compact-text">
+        <span>{activity.title}</span>
+      </div>
+      <span className="compact-value mono call-time">{formatClock(elapsed)}</span>
+      <button
+        type="button"
+        className={`call-btn ${muted ? "muted" : ""}`}
+        title={muted ? "Включить микрофон" : "Выключить микрофон"}
+        onClick={(e) => {
+          e.stopPropagation();
+          ipc.micToggle().catch(() => {});
+        }}
+      >
+        {muted ? <MicOff size={13} /> : <Mic size={13} />}
+      </button>
+      <button
+        type="button"
+        className="call-btn"
+        title={`Открыть ${activity.title}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          ipc.callOpen().catch(() => {});
+        }}
+      >
+        <ExternalLink size={12} />
+      </button>
+    </div>
+  );
+}
+
+/** Скачивание в браузере: имя файла, объём и скорость. */
+function DownloadCompact({ activity }: { activity: Activity }) {
+  return (
+    <div className="compact-row download-compact">
+      <span className="compact-icon accent download-icon">
+        <ArrowDownToLine size={15} />
+      </span>
+      <div className="compact-text">
+        <span>{activity.title}</span>
+        {activity.subtitle && <small>{activity.subtitle}</small>}
+      </div>
+      <span className="download-bar" aria-hidden>
+        <i />
+      </span>
+    </div>
+  );
+}
+
+/** Точки как на iPhone: оранжевая — микрофон, зелёная — камера. */
+function PrivacyDots() {
+  const p = useIsland((s) => s.privacy);
+  const on = useApp((s) => s.settings?.modules.privacy);
+  if (!on || (!p.microphone.length && !p.camera.length)) return null;
+  return (
+    <span className="privacy-dots">
+      {p.microphone.length > 0 && <i className="dot mic" title={`Микрофон: ${p.microphone.join(", ")}`} />}
+      {p.camera.length > 0 && <i className="dot cam" title={`Камера: ${p.camera.join(", ")}`} />}
+    </span>
+  );
+}
 
 function TimerCompact({ activity }: { activity: Activity }) {
   const id = activity.id.slice("timer:".length);
@@ -87,6 +172,27 @@ function BatteryPulse({ activity }: { activity: Activity }) {
   );
 }
 
+/** Запуск приложения из острова: иконка «вылетает», от неё расходится кольцо, по острову проходит блик. */
+function LaunchPulse({ activity }: { activity: Activity }) {
+  return (
+    <div className="compact-row launch-pulse" key={activity.updatedAt}>
+      <span className="launch-icon">
+        {activity.icon ? <img src={activity.icon} alt="" draggable={false} /> : <Rocket size={16} />}
+        <i className="launch-ring" />
+        {activity.icon && <img className="launch-ghost" src={activity.icon} alt="" draggable={false} />}
+      </span>
+      <div className="compact-text">
+        <span>{activity.title}</span>
+      </div>
+      <span className="launch-dots" aria-label={activity.subtitle ?? undefined}>
+        <i />
+        <i />
+        <i />
+      </span>
+    </div>
+  );
+}
+
 function Clock() {
   const now = useNow(1000);
   const showCpu = useApp((s) => s.settings?.systemMonitor.showInCompact && s.settings.modules.systemMonitor);
@@ -110,7 +216,10 @@ export function CompactView({ top }: { top: Activity | null }) {
   const queued = useIsland((s) => s.notification.queued);
   const musicInCompact = useApp((s) => s.settings?.music.showInCompact);
   let content;
-  if (top?.id === "battery") content = <BatteryPulse activity={top} />;
+  if (top?.id === "launch") content = <LaunchPulse activity={top} />;
+  else if (top?.id === "call") content = <CallCompact activity={top} />;
+  else if (top?.id === "download") content = <DownloadCompact activity={top} />;
+  else if (top?.id === "battery") content = <BatteryPulse activity={top} />;
   else if (top?.id.startsWith("timer:")) content = <TimerCompact activity={top} />;
   else if (top?.kind === "music" && musicInCompact) content = <MusicCompact />;
   else if (top?.kind === "plugin")
@@ -128,6 +237,7 @@ export function CompactView({ top }: { top: Activity | null }) {
   return (
     <div className="compact">
       {content}
+      <PrivacyDots />
       {(dnd || queued > 0) && (
         <div className="compact-badges">
           {dnd && <BellOff size={12} aria-label="Не беспокоить" />}

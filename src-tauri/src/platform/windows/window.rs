@@ -17,6 +17,16 @@ pub fn prepare_overlay(window: &tauri::WebviewWindow) {
         let _ = DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &corner as *const _ as *const _, 4);
         let no_border: u32 = 0xFFFF_FFFE; // DWMWA_COLOR_NONE
         let _ = DwmSetWindowAttribute(hwnd, DWMWA_BORDER_COLOR, &no_border as *const _ as *const _, 4);
+
+        // Инструментальное окно: без кнопки на панели задач и в Alt+Tab. Без этого
+        // Windows после сворачивания («Показать рабочий стол») возвращала острову
+        // кнопку на панели задач.
+        use windows::Win32::UI::WindowsAndMessaging::{GetWindowLongPtrW, SetWindowLongPtrW, GWL_EXSTYLE, WS_EX_APPWINDOW, WS_EX_TOOLWINDOW};
+        let ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        let want = (ex | WS_EX_TOOLWINDOW.0 as isize) & !(WS_EX_APPWINDOW.0 as isize);
+        if want != ex {
+            SetWindowLongPtrW(hwnd, GWL_EXSTYLE, want);
+        }
     }
 }
 use windows::Win32::UI::WindowsAndMessaging::{SetWindowPos, SWP_NOACTIVATE, SWP_NOOWNERZORDER, SWP_NOZORDER};

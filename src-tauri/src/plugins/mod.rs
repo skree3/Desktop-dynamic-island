@@ -512,6 +512,7 @@ impl PluginManager {
                     icon: None,
                     progress: params.get("progress").and_then(|v| v.as_f64()).map(|v| v.clamp(0.0, 1.0)),
                     updated_at: now_ms(),
+                    started_at: None,
                 });
                 Ok(serde_json::Value::Null)
             }

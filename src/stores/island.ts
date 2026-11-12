@@ -1,7 +1,7 @@
 // Состояние панели: режим отображения, активная панель, уведомления, активности.
 
 import { create } from "zustand";
-import type { Activity, GameModeState, NotificationPayload, Priority } from "../types";
+import type { Activity, GameModeState, NotificationPayload, PrivacyState, Priority } from "../types";
 
 export type IslandMode = "compact" | "expanded" | "notification";
 
@@ -24,6 +24,8 @@ interface IslandStore {
   notification: NotificationPayload;
   activities: Activity[];
   gameMode: GameModeState;
+  /** Кто использует микрофон и камеру. */
+  privacy: PrivacyState;
   expand: (card?: string | null) => void;
   collapse: () => void;
   setCard: (card: string) => void;
@@ -33,6 +35,7 @@ interface IslandStore {
   setNotification: (n: NotificationPayload) => void;
   setActivities: (a: Activity[]) => void;
   setGameMode: (g: GameModeState) => void;
+  setPrivacy: (p: PrivacyState) => void;
 }
 
 export const useIsland = create<IslandStore>((set, get) => ({
@@ -44,6 +47,7 @@ export const useIsland = create<IslandStore>((set, get) => ({
   notification: { current: null, queued: 0, dnd: false, missed: 0 },
   activities: [],
   gameMode: { active: false, reason: null, app: null },
+  privacy: { microphone: [], camera: [], micMuted: null },
 
   expand: (card) => set({ mode: "expanded", activeCard: card ?? get().activeCard }),
   collapse: () => {
@@ -56,6 +60,7 @@ export const useIsland = create<IslandStore>((set, get) => ({
   },
   setAttached: (attached) => set({ attached }),
   setDragging: (dragging) => set({ dragging }),
+  setPrivacy: (privacy) => set({ privacy }),
   setNotification: (notification) => {
     const mode = get().mode;
     // Уведомление не перебивает раскрытую панель — оно появится после сворачивания.

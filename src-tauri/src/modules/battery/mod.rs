@@ -82,6 +82,7 @@ impl BatteryModule {
             icon: None,
             progress: percent.map(|p| p as f64 / 100.0),
             updated_at: now_ms(),
+            started_at: None,
         });
         let st2 = st.clone();
         tauri::async_runtime::spawn(async move {

@@ -193,8 +193,12 @@ mod tests {
     #[test]
     fn matching() {
         assert_eq!(match_app("Spotify", None).map(|k| k.id), Some("spotify"));
-        assert_eq!(match_app("Something", Some(r"C:\x\Telegram.exe")).map(|k| k.id), Some("telegram"));
-        assert!(match_app("Notepad", Some(r"C:\Windows\notepad.exe")).is_none());
+        #[cfg(windows)]
+        let (tg, np) = (r"C:\x\Telegram.exe", r"C:\Windows\notepad.exe");
+        #[cfg(not(windows))]
+        let (tg, np) = ("/opt/x/Telegram", "/usr/bin/notepad");
+        assert_eq!(match_app("Something", Some(tg)).map(|k| k.id), Some("telegram"));
+        assert!(match_app("Notepad", Some(np)).is_none());
         // «steam» не должен совпадать со словом внутри другого названия
         assert!(match_app("GeoGuessr Steam Edition", None).is_none());
         assert!(match_app("Steamworks Common Redistributables", None).is_none());

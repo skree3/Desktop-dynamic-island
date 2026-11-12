@@ -8,6 +8,7 @@
 
 pub mod apps;
 pub mod audio;
+pub mod banners;
 pub mod bluetooth;
 pub mod brightness;
 pub mod clipboard;
@@ -17,6 +18,7 @@ pub mod media;
 pub mod network;
 pub mod notifications;
 pub mod power;
+pub mod privacy;
 pub mod proxy;
 pub mod shell;
 pub mod window;
@@ -123,6 +125,12 @@ pub fn is_wayland() -> bool {
         || std::env::var_os("WAYLAND_DISPLAY").is_some()
 }
 
+/// Запуск внутри WSL (Windows Subsystem for Linux, графика через WSLg).
+pub fn is_wsl() -> bool {
+    std::env::var_os("WSL_DISTRO_NAME").is_some()
+        || read_trim("/proc/sys/kernel/osrelease").map(|s| s.to_lowercase().contains("microsoft")).unwrap_or(false)
+}
+
 /// Окно работает через XWayland, если мы принудительно выставили GDK_BACKEND=x11.
 pub fn running_on_xwayland() -> bool {
     is_wayland() && std::env::var("GDK_BACKEND").map(|v| v == "x11").unwrap_or(false)
@@ -137,6 +145,16 @@ pub fn prepare_environment() {
     if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
         // Обходит пустые окна WebKitGTK на некоторых драйверах (NVIDIA).
         std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    }
+    if std::env::var_os("WEBKIT_DISABLE_COMPOSITING_MODE").is_none() {
+        // Без аппаратного композитинга WebKitGTK 2.4x–2.5x рисует пустое (чёрное)
+        // окно на части драйверов и в виртуальных машинах. Остров маленький,
+        // программной отрисовки ему хватает с запасом (как и на Windows).
+        std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
+    }
+    if is_wsl() && std::env::var_os("LIBGL_ALWAYS_SOFTWARE").is_none() {
+        // WSLg: OpenGL через d3d12 не рисует содержимое WebKit.
+        std::env::set_var("LIBGL_ALWAYS_SOFTWARE", "1");
     }
 }
 

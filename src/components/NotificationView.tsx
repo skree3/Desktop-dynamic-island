@@ -22,8 +22,10 @@ export function NotificationView({ n }: { n: IslandNotification }) {
   const canOpen = n.kind === "system";
   return (
     <div className="notif" onMouseEnter={() => ipc.notificationHold(n.id, true).catch(() => {})} onMouseLeave={() => ipc.notificationHold(n.id, false).catch(() => {})}>
-      <KindIcon n={n} />
-      <div className="notif-body">
+      <span className="notif-fly" key={n.id}>
+        <KindIcon n={n} />
+      </span>
+      <div className="notif-body" key={`b-${n.id}`}>
         <div className="notif-head">
           <span className="notif-app">{n.appName}</span>
           <span className="notif-time">{formatTime(n.timestamp)}</span>

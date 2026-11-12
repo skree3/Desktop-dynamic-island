@@ -36,7 +36,15 @@ fi
 
 if ! command -v cargo >/dev/null 2>&1; then
   log "Установка Rust (rustup)"
-  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+  if ! curl --proto '=https' --tlsv1.2 -sSf --max-time 30 https://sh.rustup.rs | sh -s -- -y --profile minimal; then
+    # sh.rustup.rs бывает недоступен (блокировки, VPN) — берём rustup-init напрямую.
+    log "sh.rustup.rs недоступен, скачиваю rustup-init с static.rust-lang.org"
+    curl --proto '=https' --tlsv1.2 -sSf --retry 3 -o /tmp/rustup-init \
+      "https://static.rust-lang.org/rustup/dist/$(uname -m)-unknown-linux-gnu/rustup-init"
+    chmod +x /tmp/rustup-init
+    /tmp/rustup-init -y --profile minimal
+    rm -f /tmp/rustup-init
+  fi
 fi
 # shellcheck disable=SC1091
 [ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"

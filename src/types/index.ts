@@ -36,8 +36,9 @@ export interface Settings {
     historyLimit: number;
     showBody: boolean;
     appRules: AppRule[];
+    islandOnly: boolean;
   };
-  music: { showArtwork: boolean; showInCompact: boolean; preferredSource: string | null; pollIntervalMs: number };
+  music: { showArtwork: boolean; showInCompact: boolean; preferredSource: string | null; pollIntervalMs: number; lyrics: boolean };
   systemMonitor: { intervalMs: number; showInCompact: boolean; historyPoints: number };
   clipboard: {
     historyEnabled: boolean;
@@ -83,7 +84,9 @@ export type ModuleId =
   | "plugins"
   | "notes"
   | "shelf"
-  | "battery";
+  | "battery"
+  | "privacy"
+  | "downloads";
 
 export interface AppRule {
   app: string;
@@ -137,6 +140,21 @@ export interface Activity {
   icon: string | null;
   progress: number | null;
   updatedAt: number;
+  /** Начало длительного события (звонок), unix ms. */
+  startedAt?: number | null;
+}
+
+/** Кто сейчас использует микрофон и камеру. */
+export interface PrivacyState {
+  microphone: string[];
+  camera: string[];
+  micMuted: boolean | null;
+}
+
+/** Текст песни: строки с временем начала (мс). */
+export interface Lyrics {
+  lines: [number, string][];
+  instrumental: boolean;
 }
 
 export interface NotificationAction {

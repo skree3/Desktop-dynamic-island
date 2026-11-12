@@ -132,6 +132,17 @@ export const ipc = {
   shelfAdd: (paths: string[]) => call<number>("shelf_add", { paths }),
   shelfCommand: (command: "open" | "reveal" | "remove" | "copy" | "clear", id?: number, ids?: number[]) =>
     call<void>("shelf_command", { command, id: id ?? null, ids: ids ?? null }),
+  shelfDragOut: (ids: number[]) => call<void>("shelf_drag_out", { ids }),
+  screenshotRegion: () => call<boolean>("screenshot_region"),
+
+  // микрофон, камера, звонки
+  privacyState: () => call<T.PrivacyState>("privacy_state"),
+  micToggle: () => call<boolean>("mic_toggle"),
+  callOpen: () => call<void>("call_open"),
+
+  // тексты песен
+  lyrics: (artist: string, title: string, album: string, durationMs: number | null) =>
+    call<T.Lyrics | null>("lyrics_get", { artist, title, album, durationMs }),
 
   // обновления
   updateCheck: () => call<T.UpdateInfo>("update_check"),

@@ -14,6 +14,28 @@ use crate::logging::category;
 pub const ISLAND: &str = "island";
 pub const SETTINGS: &str = "settings";
 
+/// Фронтенд сообщил о первой отрисовке (команда island_ready).
+pub static ISLAND_READY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Страховка: если фронтенд за несколько секунд не сообщил о готовности
+/// (например, WebKitGTK не отрисовывает скрытое окно), показываем окно сами —
+/// иначе приложение выглядит так, будто не запустилось.
+pub fn show_if_frontend_silent(app: &AppHandle, st: &Shared) {
+    let (app, st) = (app.clone(), st.clone());
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_secs(4)).await;
+        if ISLAND_READY.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        st.log.warn(category::APP, "window", "интерфейс не сообщил о готовности за 4 с — окно панели показано принудительно");
+        if !st.flags.user_hidden.load(Ordering::SeqCst) && !st.game_mode_active() {
+            apply_position(&app, &st);
+            show_island(&app, &st);
+        }
+        crate::tray::refresh(&app);
+    });
+}
+
 static IGNORE_MOVES_UNTIL: AtomicI64 = AtomicI64::new(0);
 static MOVE_GEN: AtomicI64 = AtomicI64::new(0);
 static LAST_SIGNATURE: Mutex<String> = Mutex::new(String::new());
@@ -85,7 +107,7 @@ fn target_monitor(app: &AppHandle, st: &AppState) -> Option<Monitor> {
 }
 
 fn set_bounds(win: &WebviewWindow, x: i32, y: i32, w: u32, h: u32) {
-    IGNORE_MOVES_UNTIL.store(now_ms() + 400, Ordering::SeqCst);
+    IGNORE_MOVES_UNTIL.fetch_max(now_ms() + 400, Ordering::SeqCst);
     if !crate::platform::os::window::set_bounds(win, x, y, w, h) {
         // GTK не принимает нулевой размер (gtk_window_resize: assertion 'width > 0').
         if w > 0 && h > 0 {
@@ -112,10 +134,17 @@ pub fn apply_position(app: &AppHandle, st: &AppState) {
     let key = monitor_key(&m);
     let placement = st.with_settings(|s| s.position.placements.get(&key).copied().unwrap_or_default());
     // В Linux до первой отрисовки окна outer_size() возвращает 0×0.
-    let size = win.outer_size().ok().filter(|s| s.width > 0 && s.height > 0).unwrap_or_else(|| {
-        let scale = m.scale_factor();
-        PhysicalSize::new((240.0 * scale).round() as u32, (52.0 * scale).round() as u32)
-    });
+    let scale = m.scale_factor();
+    let last = *LAST_LOGICAL.lock().unwrap_or_else(|p| p.into_inner());
+    let size = match last {
+        // Размер, который задал интерфейс, точнее outer_size(): в GTK тот бывает завышен.
+        Some((lw, lh)) => PhysicalSize::new((lw * scale).round() as u32, (lh * scale).round() as u32),
+        None => win
+            .outer_size()
+            .ok()
+            .filter(|s| s.width > 0 && s.height > 0)
+            .unwrap_or_else(|| PhysicalSize::new((240.0 * scale).round() as u32, (52.0 * scale).round() as u32)),
+    };
     let (x, y) = compute(&m, placement, size.width, size.height);
     set_bounds(&win, x, y, size.width, size.height);
     emit_attached(app, y <= m.position().y);
@@ -156,7 +185,11 @@ pub fn center_island(app: &AppHandle, st: &Shared) {
 }
 
 /// Изменение размера окна панели с сохранением точки привязки (центр сверху).
+/// Последний размер острова, заданный интерфейсом (логические пиксели).
+static LAST_LOGICAL: Mutex<Option<(f64, f64)>> = Mutex::new(None);
+
 pub fn resize_island(app: &AppHandle, st: &AppState, logical_w: f64, logical_h: f64) {
+    *LAST_LOGICAL.lock().unwrap_or_else(|p| p.into_inner()) = Some((logical_w, logical_h));
     let Some(win) = island(app) else { return };
     let m = win.current_monitor().ok().flatten().or_else(|| target_monitor(app, st));
     let scale = m.as_ref().map(|m| m.scale_factor()).unwrap_or(1.0);
@@ -292,11 +325,36 @@ pub fn start_monitor_watch(app: &AppHandle, st: &Shared) {
 }
 
 pub fn show_island(app: &AppHandle, st: &AppState) {
+    // Менеджер окон Linux при показе может сам переставить окно — это не
+    // перетаскивание пользователем, такую позицию запоминать нельзя.
+    IGNORE_MOVES_UNTIL.store(now_ms() + 1500, Ordering::SeqCst);
     if let Some(w) = island(app) {
         let _ = w.show();
         let _ = w.set_always_on_top(true);
     }
     st.flags.island_visible.store(true, Ordering::SeqCst);
+    #[cfg(target_os = "linux")]
+    kick_after_show(app);
+}
+
+/// Linux: после показа окна WebKitGTK иногда не рисует уже готовую страницу
+/// (окно остаётся пустым до следующего изменения размера), а менеджер окон
+/// может поставить окно в другое место. Слегка меняем размер и возвращаем
+/// остров на его позицию.
+#[cfg(target_os = "linux")]
+fn kick_after_show(app: &AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        let st = crate::core::state::shared(&app);
+        let last = *LAST_LOGICAL.lock().unwrap_or_else(|p| p.into_inner());
+        apply_position(&app, &st);
+        if let Some((w, h)) = last {
+            resize_island(&app, &st, w + 1.0, h);
+            tokio::time::sleep(Duration::from_millis(60)).await;
+            resize_island(&app, &st, w, h);
+        }
+    });
 }
 
 pub fn hide_island(app: &AppHandle, st: &AppState) {
@@ -378,10 +436,24 @@ pub fn create_island(app: &AppHandle, software_rendering: bool) -> tauri::Result
         .shadow(false)
         .visible(false)
         .focused(false);
+    // Windows: встроенный обработчик wry при создании снимает (RevokeDragDrop) цели
+    // сброса и с окон Chromium из процесса WebView2 (межпроцессный Revoke срабатывает),
+    // а свою поставить туда не может. Если эти окна уже созданы, файлы на остров
+    // перестают приниматься совсем. Поэтому обработчик wry отключён, а файлы принимает
+    // наша цель (platform::windows::dragdrop), которой WebView2 передаёт сброс сам.
     #[cfg(windows)]
-    let builder = builder.additional_browser_args(browser_args());
+    let builder = builder.additional_browser_args(browser_args()).disable_drag_drop_handler();
     let win = builder.build()?;
     crate::platform::os::window::prepare_overlay(&win);
+    #[cfg(windows)]
+    let _ = win.with_webview(|w| unsafe {
+        use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Controller4;
+        use windows_core_wv2::Interface;
+        // Сброс файлов не обрабатывается страницей, а передаётся окну-хозяину.
+        if let Ok(c) = w.controller().cast::<ICoreWebView2Controller4>() {
+            let _ = c.SetAllowExternalDrop(false);
+        }
+    });
     Ok(())
 }
 

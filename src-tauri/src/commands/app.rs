@@ -80,6 +80,9 @@ pub async fn island_resize(app: AppHandle, state: State<'_, Shared>, width: f64,
 #[tauri::command]
 pub async fn island_ready(app: AppHandle, state: State<'_, Shared>) -> AppResult<()> {
     let st = state.inner();
+    if window::ISLAND_READY.swap(true, Ordering::SeqCst) {
+        return Ok(());
+    }
     let hidden = st.flags.user_hidden.load(Ordering::SeqCst) || st.game_mode_active();
     if hidden {
         window::hide_island(&app, st);

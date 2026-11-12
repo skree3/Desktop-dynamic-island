@@ -40,6 +40,9 @@ pub struct Activity {
     /// Прогресс 0..1, если применимо.
     pub progress: Option<f64>,
     pub updated_at: i64,
+    /// Начало длительного события (звонок): интерфейс показывает прошедшее время.
+    #[serde(default)]
+    pub started_at: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize)]

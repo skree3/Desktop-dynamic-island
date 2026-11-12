@@ -9,14 +9,17 @@ pub mod bluetooth;
 pub mod brightness;
 pub mod clip_history;
 pub mod clipboard;
+pub mod dragdrop;
 pub mod foreground;
 pub mod gpu;
 pub mod media;
 pub mod network;
 pub mod notifications;
 pub mod power;
+pub mod privacy;
 pub mod proxy;
 pub mod shell;
+pub mod unread;
 pub mod window;
 
 use std::cell::Cell;

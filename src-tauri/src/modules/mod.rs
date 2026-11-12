@@ -5,10 +5,12 @@
 pub mod applications;
 pub mod battery;
 pub mod clipboard;
+pub mod downloads;
 pub mod game_mode;
 pub mod music;
 pub mod notes;
 pub mod notifications;
+pub mod privacy;
 pub mod shelf;
 pub mod system_monitor;
 pub mod timers;
@@ -114,9 +116,13 @@ pub fn reconcile(app: &AppHandle, st: &Shared) {
     let sys_needed = st.flags.card_active("system") || s.system_monitor.show_in_compact;
     st.sysmon.set_running(app, st, s.modules.system_monitor && !game && ui_live && sys_needed);
     st.clipboard.set_running(app, st, s.modules.clipboard && s.clipboard.history_enabled);
-    st.notifications.set_running(app, st, s.modules.notifications && s.notifications.enabled && s.notifications.listen_system);
+    let listening = s.modules.notifications && s.notifications.enabled && s.notifications.listen_system;
+    st.notifications.set_running(app, st, listening);
+    st.notifications.sync_popups(st, listening && s.notifications.island_only && st.island_visible());
     st.timers.set_running(app, st, s.modules.timers);
     st.game_mode.ensure_running(app, st);
     st.battery.set_running(app, st, s.modules.battery);
+    st.privacy.set_running(app, st, s.modules.privacy);
+    st.downloads.set_running(app, st, s.modules.downloads);
     st.updater.set_running(app, st, s.general.check_updates);
 }

@@ -242,3 +242,18 @@ pub struct EnvironmentInfo {
     pub global_hotkeys_supported: bool,
     pub notes: Vec<String>,
 }
+
+/// Устройство (микрофон или камера), которое сейчас использует приложение.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct DeviceUse {
+    /// "microphone" | "camera"
+    pub device: String,
+    pub app_name: String,
+    /// Путь к исполняемому файлу (если известен).
+    pub app_path: Option<String>,
+    /// Windows: семейство пакета Microsoft Store (Microsoft.WindowsSoundRecorder_8wekyb3d8bbwe).
+    pub app_id: Option<String>,
+    /// Когда начато использование (unix ms).
+    pub since: i64,
+}

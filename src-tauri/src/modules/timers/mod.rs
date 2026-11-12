@@ -107,6 +107,7 @@ impl TimersModule {
                     icon: None,
                     progress: None,
                     updated_at: t.started_at.unwrap_or(0),
+                    started_at: None,
                 });
             } else {
                 st.events.clear_activity(&id);

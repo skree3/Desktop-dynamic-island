@@ -5,6 +5,8 @@
 //! интерполирует её по `positionMs + (now - positionUpdatedAt)`. Событие
 //! отправляется при смене трека, статуса или перемотке.
 
+pub mod lyrics;
+
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -161,6 +163,7 @@ impl MusicModule {
                 icon: None,
                 progress: None,
                 updated_at: now_ms(),
+                started_at: None,
             }),
             _ => st.events.clear_activity("music"),
         }

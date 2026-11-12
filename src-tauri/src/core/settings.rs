@@ -106,6 +106,10 @@ pub struct ModulesSettings {
     pub shelf: bool,
     /// Анимация при подключении зарядки и предупреждения о низком заряде.
     pub battery: bool,
+    /// Индикатор микрофона и камеры, звонки.
+    pub privacy: bool,
+    /// Загрузки браузеров в острове.
+    pub downloads: bool,
 }
 impl Default for ModulesSettings {
     fn default() -> Self {
@@ -127,6 +131,8 @@ impl Default for ModulesSettings {
             notes: true,
             shelf: true,
             battery: true,
+            privacy: true,
+            downloads: true,
         }
     }
 }
@@ -150,6 +156,8 @@ impl ModulesSettings {
             "notes" => self.notes,
             "shelf" => self.shelf,
             "battery" => self.battery,
+            "privacy" => self.privacy,
+            "downloads" => self.downloads,
             _ => false,
         }
     }
@@ -176,6 +184,8 @@ pub struct NotificationSettings {
     pub history_limit: u32,
     pub show_body: bool,
     pub app_rules: Vec<AppRule>,
+    /// Уведомления других приложений показываются только в острове, без системных баннеров.
+    pub island_only: bool,
 }
 impl Default for NotificationSettings {
     fn default() -> Self {
@@ -188,6 +198,7 @@ impl Default for NotificationSettings {
             history_limit: 100,
             show_body: true,
             app_rules: vec![],
+            island_only: true,
         }
     }
 }
@@ -199,10 +210,12 @@ pub struct MusicSettings {
     pub show_in_compact: bool,
     pub preferred_source: Option<String>,
     pub poll_interval_ms: u64,
+    /// Строка текста песни в свёрнутом острове (LRCLIB).
+    pub lyrics: bool,
 }
 impl Default for MusicSettings {
     fn default() -> Self {
-        Self { show_artwork: true, show_in_compact: true, preferred_source: None, poll_interval_ms: 1000 }
+        Self { show_artwork: true, show_in_compact: true, preferred_source: None, poll_interval_ms: 1000, lyrics: true }
     }
 }
 

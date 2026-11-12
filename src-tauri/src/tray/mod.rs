@@ -88,6 +88,8 @@ pub fn quit(app: &AppHandle, st: &Shared) {
     st.flags.quitting.store(true, Ordering::SeqCst);
     st.log.info(category::APP, "app", "завершение работы");
     st.ai.close_all(app);
+    // Всплывающие уведомления системы возвращаются как были.
+    st.notifications.sync_popups(st, false);
     app.exit(0);
 }
 

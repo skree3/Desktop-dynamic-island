@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, type Transition } from "motion/react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { listen } from "@tauri-apps/api/event";
 import { CompactView } from "./CompactView";
 import { ExpandedView } from "./ExpandedView";
 import { NotificationView } from "./NotificationView";
@@ -104,20 +104,25 @@ export function Island() {
     }
   }, [mode, activeCard, panels, top]);
 
-  // Перетаскивание файлов на остров → полка.
+  // Запуск приложения: панель сворачивается, чтобы показать анимацию запуска.
+  const launchKey = top?.id === "launch" ? top.updatedAt : 0;
   useEffect(() => {
-    const un = getCurrentWebview().onDragDropEvent((e) => {
+    if (launchKey && useIsland.getState().mode === "expanded") useIsland.getState().collapse();
+  }, [launchKey]);
+
+  // Перетаскивание файлов на остров → полка. Файлы добавляет сам бэкенд,
+  // здесь только подсветка и показ полки.
+  useEffect(() => {
+    const un = listen<{ state: "enter" | "leave" | "drop"; added?: number }>("shelf://drag", (e) => {
       const st = useIsland.getState();
-      const shelfOn = useApp.getState().settings?.modules.shelf;
-      if (!shelfOn) return;
-      const p = e.payload;
-      if (p.type === "enter") {
+      const s = e.payload.state;
+      if (s === "enter") {
         st.setDragging(true);
         st.expand("shelf");
-      } else if (p.type === "drop") {
+      } else if (s === "drop") {
         st.setDragging(false);
-        if (p.paths.length) ipc.shelfAdd(p.paths).catch(() => {});
-      } else if (p.type === "leave") {
+        if (st.mode !== "expanded" || st.activeCard !== "shelf") st.expand("shelf");
+      } else {
         st.setDragging(false);
       }
     });
