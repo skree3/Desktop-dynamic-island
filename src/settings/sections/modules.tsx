@@ -128,7 +128,7 @@ export function NotificationsSection() {
           <Field
             wide
             label="Пропускать через «Не беспокоить»"
-            description="Приложения, которые сами молчат в режиме «Не беспокоить» (например, Telegram). Их уведомления дойдут до острова, но Windows может на мгновение показать и свой баннер"
+            description="Только для программ, которые сами замолкают в режиме «Не беспокоить». Windows будет показывать их баннеры, поэтому обычно список лучше оставить пустым"
           >
             <ListEditor items={n.dndAllow ?? []} onChange={(v) => set({ dndAllow: v })} placeholder="Идентификатор приложения (AUMID), например Telegram.TelegramDesktop" />
             {recentApps.length > 0 && (

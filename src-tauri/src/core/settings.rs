@@ -243,7 +243,7 @@ impl Default for NotificationSettings {
             island_only: true,
             sound: true,
             group_by_app: true,
-            dnd_allow: vec!["Telegram.TelegramDesktop".into()],
+            dnd_allow: vec![],
         }
     }
 }
