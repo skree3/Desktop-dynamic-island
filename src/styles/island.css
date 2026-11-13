@@ -14,7 +14,7 @@
 }
 .island.attached::before { left: -14px; -webkit-mask-image: radial-gradient(circle at 0% 100%, transparent 13.5px, #000 14px); mask-image: radial-gradient(circle at 0% 100%, transparent 13.5px, #000 14px); }
 .island.attached::after { right: -14px; -webkit-mask-image: radial-gradient(circle at 100% 100%, transparent 13.5px, #000 14px); mask-image: radial-gradient(circle at 100% 100%, transparent 13.5px, #000 14px); }
-.island.floating { box-shadow: inset 0 0 0 1px var(--border); }
+.island.floating { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07), 0 6px 18px rgba(0, 0, 0, 0.32); }
 
 /* Компактное состояние */
 .compact { height: 100%; display: flex; align-items: center; padding: 0 14px; gap: 8px; }
@@ -284,3 +284,55 @@
 .list-item.draggable { cursor: grab; }
 .list-item.draggable:active { cursor: grabbing; }
 .shelf-drop .chip { margin-top: 2px; display: inline-flex; align-items: center; gap: 5px; }
+
+/* Группа уведомлений одного приложения */
+.notif-count { font-family: "JetBrains Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; font-size: 10.5px; color: var(--text-muted); padding: 0 5px; border-radius: 6px; background: rgba(255, 255, 255, 0.08); }
+.notif-stack { margin-top: 3px; display: flex; flex-direction: column; gap: 1px; }
+.notif-stack-line { font-size: 11.5px; line-height: 16px; color: var(--text-muted); opacity: 0.75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.notif-stack-line + .notif-stack-line { opacity: 0.5; }
+.notif-title { animation: notif-roll 0.32s cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes notif-roll { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+.notif-group { border-radius: 12px; }
+.notif-group-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px; border: 0; border-radius: 12px; background: transparent; color: inherit; font: inherit; cursor: pointer; text-align: left; transition: background-color 0.14s cubic-bezier(0.22, 1, 0.36, 1); }
+.notif-group-head:hover { background: var(--surface-hover); }
+.notif-group-chev { color: var(--text-muted); transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1); flex-shrink: 0; }
+.notif-group.open .notif-group-chev { transform: rotate(90deg); }
+.notif-group-items { padding-left: 10px; animation: notif-roll 0.3s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* Текст песни на весь остров */
+.lyric-line.clickable { cursor: pointer; }
+.lyrics-full { position: relative; overflow: hidden; margin: 0 4px 4px; border-radius: 20px; }
+.lyrics-bg { position: absolute; inset: -40px; width: calc(100% + 80px); height: calc(100% + 80px); object-fit: cover; filter: blur(40px) saturate(1.2); opacity: 0.32; pointer-events: none; }
+.lyrics-head { position: absolute; z-index: 2; left: 16px; right: 16px; top: 10px; display: flex; gap: 8px; align-items: baseline; font-size: 12px; pointer-events: none; }
+.lyrics-track { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lyrics-artist { color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lyrics-list { position: relative; z-index: 1; display: flex; flex-direction: column; padding: 0 16px; transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1); }
+.lyrics-line { display: block; width: 100%; padding: 4px 0; border: 0; background: none; text-align: left; font: inherit; font-size: 15px; line-height: 22px; color: var(--text-muted); opacity: 0.55; cursor: pointer; transition: color 0.3s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.3s, transform 0.4s cubic-bezier(0.22, 1, 0.36, 1); transform-origin: left center; }
+.lyrics-line:hover { opacity: 0.9; }
+.lyrics-line.past { opacity: 0.35; }
+.lyrics-line.cur { color: var(--text); opacity: 1; font-weight: 600; transform: scale(1.18); }
+.lyrics-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 13px; }
+
+/* Заметки: напоминания и голос */
+.note-buttons { display: flex; flex-direction: column; gap: 4px; }
+.note-tags { display: flex; gap: 6px; margin-top: 4px; }
+.note-remind, .note-play { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 7px; border-radius: 6px; font-size: 11.5px; background: rgba(255, 255, 255, 0.07); color: var(--text); border: 0; font-family: inherit; }
+.note-remind { color: #f0a64a; }
+.note-remind.done { color: var(--text-muted); }
+.note-play { cursor: pointer; transition: background-color 0.14s cubic-bezier(0.22, 1, 0.36, 1); }
+.note-play:hover { background: rgba(255, 255, 255, 0.12); }
+.note-hint { display: flex; align-items: center; gap: 6px; color: #f0a64a; margin: 4px 2px 0; animation: notif-roll 0.3s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.voice-rec { display: flex; align-items: center; gap: 10px; margin: 6px 2px 0; }
+.voice-dot { width: 8px; height: 8px; border-radius: 4px; background: #e5484d; animation: voice-blink 1.2s ease-in-out infinite; }
+@keyframes voice-blink { 50% { opacity: 0.3; } }
+.voice-wave { display: flex; align-items: center; gap: 2px; height: 18px; flex: 1; }
+.voice-wave i { display: block; width: 3px; height: 18px; border-radius: 2px; background: #f0a64a; transform-origin: center; transition: transform 0.1s linear; }
+
+/* Приветствие */
+.greeting { justify-content: center; gap: 10px; }
+.greeting-dot { width: 7px; height: 7px; border-radius: 4px; background: #f0a64a; animation: greet-dot 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.greeting-text { font-weight: 500; font-size: 13.5px; white-space: nowrap; }
+.greeting-text span { display: inline-block; animation: greet-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes greet-in { from { opacity: 0; transform: translateY(6px); filter: blur(3px); } to { opacity: 1; transform: none; filter: none; } }
+@keyframes greet-dot { from { transform: scale(0); } to { transform: none; } }

@@ -24,6 +24,22 @@ function Bars({ playing }: { playing: boolean }) {
   );
 }
 
+/** Приветствие: буквы проявляются по очереди. */
+function Greeting({ text }: { text: string }) {
+  return (
+    <div className="compact-row greeting" aria-live="polite">
+      <span className="greeting-dot" />
+      <span className="greeting-text">
+        {[...text].map((ch, i) => (
+          <span key={i} style={{ animationDelay: `${i * 28}ms` }}>
+            {ch === " " ? " " : ch}
+          </span>
+        ))}
+      </span>
+    </div>
+  );
+}
+
 const MusicCompact = memo(function MusicCompact() {
   const sessions = useMedia((s) => s.sessions);
   const selected = useMedia((s) => s.selectedId);
@@ -45,7 +61,16 @@ const MusicCompact = memo(function MusicCompact() {
       {showArt && art ? <img className="compact-art" src={art} alt="" draggable={false} /> : <span className="compact-icon"><Music2 size={15} /></span>}
       <div className="compact-text marquee">
         {line ? (
-          <span className="lyric-line" key={line} title={s.title}>
+          <span
+            className="lyric-line clickable"
+            key={line}
+            title="Текст песни на весь остров"
+            data-no-drag
+            onClick={(e) => {
+              e.stopPropagation();
+              useIsland.getState().expand("lyrics");
+            }}
+          >
             {line}
           </span>
         ) : (
@@ -215,8 +240,10 @@ export function CompactView({ top }: { top: Activity | null }) {
   const dnd = useIsland((s) => s.notification.dnd);
   const queued = useIsland((s) => s.notification.queued);
   const musicInCompact = useApp((s) => s.settings?.music.showInCompact);
+  const greeting = useIsland((s) => s.greeting);
   let content;
-  if (top?.id === "launch") content = <LaunchPulse activity={top} />;
+  if (greeting) content = <Greeting text={greeting} />;
+  else if (top?.id === "launch") content = <LaunchPulse activity={top} />;
   else if (top?.id === "call") content = <CallCompact activity={top} />;
   else if (top?.id === "download") content = <DownloadCompact activity={top} />;
   else if (top?.id === "battery") content = <BatteryPulse activity={top} />;

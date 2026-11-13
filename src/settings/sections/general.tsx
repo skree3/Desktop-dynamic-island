@@ -20,9 +20,6 @@ export function GeneralSection() {
         <Field label="Запускать вместе с системой" description="Desktop Island будет стартовать при входе в систему (свёрнутым в трей, если включено ниже).">
           <Toggle checked={s.general.launchAtStartup} onChange={(v) => run(() => update("general", { launchAtStartup: v }))} />
         </Field>
-        <Field label="Запускать скрытым" description="Панель не показывается при запуске — её можно открыть из трея или горячей клавишей.">
-          <Toggle checked={s.general.startHidden} onChange={(v) => run(() => update("general", { startHidden: v }))} />
-        </Field>
         <Field label="Работа в фоне" description="Закрытие окон не завершает приложение. Полный выход — через меню трея.">
           <Toggle checked={s.general.backgroundMode} onChange={(v) => run(() => update("general", { backgroundMode: v }))} />
         </Field>
@@ -52,7 +49,23 @@ export function AppearanceSection() {
   const update = useApp((x) => x.update);
   const set = (p: Partial<typeof a>) => update("appearance", p).catch(() => {});
   return (
-    <Page title="Внешний вид" description="Гибрид Dynamic Island и Windows 11: прозрачность, скругления, анимации.">
+    <Page title="Внешний вид">
+      <Group title="Остров">
+        <Field label="Цвет острова">
+          <Segmented
+            value={a.islandTone ?? "graphite"}
+            onChange={(islandTone) => set({ islandTone })}
+            options={[
+              { value: "graphite", label: "Графит" },
+              { value: "grey", label: "Серый" },
+              { value: "black", label: "Чёрный" },
+            ]}
+          />
+        </Field>
+        <Field label="Приветствие при включении" description="«Доброе утро», «Добрый вечер» — при запуске, пробуждении и разблокировке">
+          <Toggle checked={a.greeting ?? true} label="Приветствие" onChange={(greeting) => set({ greeting })} />
+        </Field>
+      </Group>
       <Group title="Тема">
         <Field label="Режим">
           <Segmented
@@ -105,7 +118,26 @@ export function PositionSection() {
   const update = useApp((x) => x.update);
   const { error, run } = useAction();
   return (
-    <Page title="Положение панели" description="По умолчанию панель прилегает к верхнему краю по центру. Перетащите её мышью куда угодно; рядом с верхним краем она снова «прилипнет».">
+    <Page title="Положение">
+      <div className="pos-picker">
+        {(["edge", "float"] as const).map((style) => (
+          <button
+            key={style}
+            type="button"
+            className={`pos-card ${p.style === style ? "on" : ""}`}
+            aria-pressed={p.style === style}
+            onClick={() => run(() => update("position", { style }).then(() => ipc.islandCenter()))}
+          >
+            <span className="pos-desk">
+              <span className={`pos-isle ${style}`} />
+            </span>
+            <span className="pos-label">
+              <span className="pos-dot" />
+              {style === "edge" ? "У края экрана" : "Плавающий"}
+            </span>
+          </button>
+        ))}
+      </div>
       <Group>
         <Field label="Закрепить положение" description="Запрещает перетаскивание панели.">
           <Toggle checked={p.locked} onChange={(v) => run(() => update("position", { locked: v }))} />

@@ -76,6 +76,16 @@ pub async fn island_resize(app: AppHandle, state: State<'_, Shared>, width: f64,
     Ok(())
 }
 
+/// Размер самого острова внутри окна — область, которая принимает мышь.
+#[tauri::command]
+pub async fn island_hitbox(app: AppHandle, width: f64, height: f64) -> AppResult<()> {
+    if !width.is_finite() || !height.is_finite() {
+        return Err(AppError::invalid("размер"));
+    }
+    window::set_hitbox(&app, width, height);
+    Ok(())
+}
+
 /// Фронтенд отрисовал первый кадр — показываем окно (если оно не должно быть скрыто).
 #[tauri::command]
 pub async fn island_ready(app: AppHandle, state: State<'_, Shared>) -> AppResult<()> {
@@ -90,6 +100,8 @@ pub async fn island_ready(app: AppHandle, state: State<'_, Shared>) -> AppResult
         window::apply_position(&app, st);
         window::show_island(&app, st);
     }
+    // Остров стал видимым — модули, зависящие от этого (баннеры «только в острове»), включаются.
+    crate::modules::reconcile(&app, st);
     crate::tray::refresh(&app);
     Ok(())
 }

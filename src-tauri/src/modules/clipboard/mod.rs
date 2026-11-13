@@ -142,6 +142,8 @@ impl ClipboardModule {
                     return None;
                 }
                 let t: String = t.chars().take(MAX_TEXT).collect();
+                // Общий буфер с телефоном (если он сопряжён и функция включена).
+                st.phone.clipboard_from_pc(st, &t);
                 let hash = hash_of("text", t.as_bytes());
                 let preview: String = t.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(200).collect();
                 ("text", t, preview, None, hash)

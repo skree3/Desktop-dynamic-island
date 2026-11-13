@@ -13,6 +13,16 @@ export interface Placement {
   top: number;
 }
 
+export interface PhoneSettings {
+  enabled: boolean;
+  deviceName: string;
+  notifications: boolean;
+  calls: boolean;
+  clipboard: boolean;
+  battery: boolean;
+  media: boolean;
+}
+
 export interface Settings {
   general: { launchAtStartup: boolean; backgroundMode: boolean; startHidden: boolean; language: string; checkUpdates: boolean };
   appearance: {
@@ -24,8 +34,10 @@ export interface Settings {
     animations: AnimationLevel;
     animationSpeed: number;
     scale: number;
+    islandTone: "graphite" | "grey" | "black";
+    greeting: boolean;
   };
-  position: { monitor: string | null; placements: Record<string, Placement>; locked: boolean };
+  position: { monitor: string | null; placements: Record<string, Placement>; locked: boolean; style: "edge" | "float" };
   modules: Record<ModuleId, boolean>;
   notifications: {
     enabled: boolean;
@@ -37,8 +49,11 @@ export interface Settings {
     showBody: boolean;
     appRules: AppRule[];
     islandOnly: boolean;
+    sound: boolean;
+    groupByApp: boolean;
   };
   music: { showArtwork: boolean; showInCompact: boolean; preferredSource: string | null; pollIntervalMs: number; lyrics: boolean };
+  phone: PhoneSettings;
   systemMonitor: { intervalMs: number; showInCompact: boolean; historyPoints: number };
   clipboard: {
     historyEnabled: boolean;
@@ -175,6 +190,10 @@ export interface IslandNotification {
   actions: NotificationAction[];
   openTarget: string | null;
   durationMs: number;
+  /** Предыдущие сообщения группы (новые сначала). */
+  stack?: { title: string; body: string; timestamp: number }[];
+  /** Сколько уведомлений в группе. */
+  count?: number;
 }
 
 export interface NotificationPayload {
@@ -535,6 +554,10 @@ export interface Note {
   pinned: boolean;
   createdAt: number;
   updatedAt: number;
+  remindAt: number | null;
+  reminded: boolean;
+  audio: string | null;
+  audioMs: number;
 }
 
 export interface ShelfItem {
@@ -555,4 +578,23 @@ export interface UpdateInfo {
   pageUrl: string;
   method: "installer" | "appimage" | "page";
   checkedAt: number;
+}
+
+export interface PhoneDevice {
+  id: string;
+  name: string;
+  kind: string;
+  paired: boolean;
+  reachable: boolean;
+  pairing: "none" | "requested" | "incoming";
+  battery: number | null;
+  charging: boolean;
+}
+
+export interface PhoneStatus {
+  enabled: boolean;
+  available: boolean;
+  message: string;
+  deviceName: string;
+  devices: PhoneDevice[];
 }

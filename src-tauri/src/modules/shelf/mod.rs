@@ -105,9 +105,11 @@ pub fn start_drop_guard(app: &tauri::AppHandle) {
             let mut shown: Option<windows::Win32::Foundation::RECT> = None;
             loop {
                 std::thread::sleep(std::time::Duration::from_millis(50));
+                // Окно острова больше самого острова — приёмник ставится над островом.
                 let island = crate::core::window::island(&app)
-                    .and_then(|w| w.hwnd().ok())
-                    .and_then(|h| dd::window_rect(windows::Win32::Foundation::HWND(h.0 as *mut _)));
+                    .filter(|w| w.is_visible().unwrap_or(false))
+                    .and_then(|_| crate::core::window::island_rect(&app))
+                    .map(|(x, y, w, h)| windows::Win32::Foundation::RECT { left: x, top: y, right: x + w, bottom: y + h });
                 let down = dd::primary_button_down();
                 let cur = dd::cursor();
                 if down && !was_down {

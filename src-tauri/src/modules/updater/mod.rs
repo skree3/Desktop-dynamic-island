@@ -209,7 +209,7 @@ impl UpdaterModule {
                             *notified = Some(latest.clone());
                             drop(notified);
                             st.log.info(category::APP, "updater", format!("доступна версия {latest}"));
-                            st.events.push(IslandNotification {
+                            st.events.push(IslandNotification { stack: Vec::new(), count: 1,
                                 id: uuid::Uuid::new_v4().to_string(),
                                 kind: NotificationKind::Internal,
                                 source: "updater".into(),

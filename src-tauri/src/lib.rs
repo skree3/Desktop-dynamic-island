@@ -87,8 +87,13 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     }
     st.hotkeys.register_all(&handle, &st);
 
-    if settings.general.launch_at_startup != tray::autostart_enabled(&handle) {
-        tray::set_autostart(&handle, settings.general.launch_at_startup, &log);
+    // Автозапуск всегда переписывается на текущий exe: после переустановки или
+    // запуска из другой папки в автозагрузке оставался старый путь, и после
+    // включения компьютера запускалась не та копия (или никакая).
+    if settings.general.launch_at_startup {
+        tray::set_autostart(&handle, true, &log);
+    } else if tray::autostart_enabled(&handle) {
+        tray::set_autostart(&handle, false, &log);
     }
 
     if let Err(e) = window::create_island(&handle, settings.performance.software_rendering) {
@@ -98,18 +103,23 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         let _ = win.set_always_on_top(true);
         let _ = win.set_skip_taskbar(true);
         window::apply_position(&handle, &st);
-        if settings.general.start_hidden {
-            st.flags.user_hidden.store(true, Ordering::SeqCst);
-            st.flags.island_visible.store(false, Ordering::SeqCst);
-        }
+        // «Запускать скрытым» больше не поддерживается: после включения компьютера
+        // остров оставался невидимым, пока не нажать на значок — это выглядело как сбой.
         // Окно показывается фронтендом после первой отрисовки (без белой вспышки).
         window::show_if_frontend_silent(&handle, &st);
+        if std::env::args().any(|a| a == "--autostart") {
+            window::refresh_after_boot(&handle, &st);
+        }
     }
+    #[cfg(windows)]
+    window::start_hit_test(&handle);
 
     window::start_monitor_watch(&handle, &st);
     #[cfg(windows)]
     modules::shelf::start_drop_guard(&handle);
     modules::reconcile(&handle, &st);
+    modules::notes::start_reminders(&st);
+    modules::greeting::start(&st);
 
     if let Some(w) = db.status.warning.clone() {
         let st2 = st.clone();

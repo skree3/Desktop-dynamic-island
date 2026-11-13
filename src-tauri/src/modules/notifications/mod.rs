@@ -21,8 +21,8 @@ pub struct NotificationsModule {
     status: Mutex<ListenerStatus>,
     /// API недоступен — не повторяем попытки до явного запроса пользователя.
     gave_up: AtomicBool,
-    /// Linux: токен скрытых всплывающих уведомлений окружения (см. platform::linux::banners).
-    #[cfg(target_os = "linux")]
+    /// Токен скрытых системных баннеров: Linux — см. platform::linux::banners,
+    /// Windows — «win:<прежний режим Не беспокоить>».
     popups: Mutex<Option<String>>,
 }
 
@@ -33,8 +33,38 @@ fn protected_app(app: &str) -> bool {
     ["безопасность", "security", "defender", "защитник"].iter().any(|k| a.contains(k))
 }
 
+#[cfg(windows)]
+fn hide_system_popups() -> Option<String> {
+    use crate::platform::os::quiet;
+    // Пользователь уже сам включил «Не беспокоить» — ничего не трогаем и потом не выключаем.
+    match quiet::get() {
+        Some(0) if quiet::set(quiet::ALARMS_ONLY) => Some("win:0".into()),
+        _ => None,
+    }
+}
+
+#[cfg(windows)]
+fn restore_system_popups(token: &str) {
+    if let Some(prev) = token.strip_prefix("win:").and_then(|v| v.parse::<u32>().ok()) {
+        // Вернуть, только если режим не меняли вручную, пока работал остров.
+        if crate::platform::os::quiet::get() == Some(crate::platform::os::quiet::ALARMS_ONLY) {
+            crate::platform::os::quiet::set(prev);
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn hide_system_popups() -> Option<String> {
+    crate::platform::linux::banners::hide_popups()
+}
+
+#[cfg(target_os = "linux")]
+fn restore_system_popups(token: &str) {
+    crate::platform::linux::banners::restore(token)
+}
+
 fn convert(n: SystemNotification, show_body: bool) -> IslandNotification {
-    IslandNotification {
+    IslandNotification { stack: Vec::new(), count: 1,
         id: uuid::Uuid::new_v4().to_string(),
         kind: NotificationKind::System,
         source: format!("system:{}", n.key),
@@ -66,42 +96,38 @@ impl NotificationsModule {
         crate::modules::reconcile(app, st);
     }
 
-    /// Linux: прячет или возвращает всплывающие уведомления окружения рабочего стола.
+    /// Прячет или возвращает системные всплывающие уведомления (баннеры и их звук).
+    /// Windows — режим «Не беспокоить», Linux — настройки окружения рабочего стола.
     /// Прежнее состояние хранится в файле — после сбоя оно восстанавливается при запуске.
-    /// В Windows баннеры убирает цикл опроса, здесь ничего делать не нужно.
     pub fn sync_popups(&self, st: &Shared, desired: bool) {
-        #[cfg(target_os = "linux")]
-        {
-            use crate::platform::linux::banners;
-            let backup = st.paths.data.join("popups-backup.txt");
-            let mut g = self.popups.lock().unwrap_or_else(|p| p.into_inner());
-            if g.is_none() {
-                if let Ok(token) = std::fs::read_to_string(&backup) {
-                    // Блокировка KDE умерла вместе с прошлым процессом — восстанавливать нечего.
-                    if token.trim() == "kde" {
-                        let _ = std::fs::remove_file(&backup);
-                    } else {
-                        *g = Some(token.trim().to_string());
-                    }
-                }
-            }
-            match (desired, g.clone()) {
-                (true, None) => {
-                    if let Some(token) = banners::hide_popups() {
-                        let _ = std::fs::write(&backup, &token);
-                        *g = Some(token);
-                    }
-                }
-                (false, Some(token)) => {
-                    banners::restore(&token);
+        let backup = st.paths.data.join("popups-backup.txt");
+        let mut g = self.popups.lock().unwrap_or_else(|p| p.into_inner());
+        if g.is_none() {
+            if let Ok(token) = std::fs::read_to_string(&backup) {
+                // Блокировка KDE умерла вместе с прошлым процессом — восстанавливать нечего.
+                if token.trim() == "kde" {
                     let _ = std::fs::remove_file(&backup);
-                    *g = None;
+                } else {
+                    *g = Some(token.trim().to_string());
                 }
-                _ => {}
             }
         }
-        #[cfg(not(target_os = "linux"))]
-        let _ = (st, desired);
+        match (desired, g.clone()) {
+            (true, None) => {
+                if let Some(token) = hide_system_popups() {
+                    let _ = std::fs::write(&backup, &token);
+                    st.log.info(category::SYSTEM_ACTION, "notifications", "системные баннеры скрыты — уведомления показывает остров");
+                    *g = Some(token);
+                }
+            }
+            (false, Some(token)) => {
+                restore_system_popups(&token);
+                let _ = std::fs::remove_file(&backup);
+                st.log.info(category::SYSTEM_ACTION, "notifications", "системные баннеры возвращены");
+                *g = None;
+            }
+            _ => {}
+        }
     }
 
     /// «Только в острове» действует, пока остров виден (скрыл его пользователь —
@@ -157,8 +183,8 @@ impl NotificationsModule {
             let mut tracker = self::unread::Tracker::default();
             let mut first = true;
             loop {
-                // «Только в острове»: уведомление показывается в острове и сразу убирается
-                // из Windows — вместе с ним исчезает и всплывающий баннер.
+                // «Только в острове»: уведомление показывается в острове и убирается из
+                // центра уведомлений Windows, чтобы не копилось там второй раз.
                 let island_only = st.notifications.island_only_active(&st);
                 let st2 = st.clone();
                 let res = tauri::async_runtime::spawn_blocking(move || {
@@ -192,8 +218,9 @@ impl NotificationsModule {
                 if let Some(e) = err {
                     st.log.warn(category::INTEGRATION, "notifications", format!("ошибка чтения уведомлений: {e}"));
                 }
-                // В режиме «только в острове» проверяем чаще, чтобы баннер не успел показаться.
-                tokio::time::sleep(std::time::Duration::from_millis(if island_only { 300 } else { 1500 })).await;
+                // Баннеры в режиме «только в острове» гасит «Не беспокоить», поэтому
+                // частый опрос нужен только для быстроты появления в острове.
+                tokio::time::sleep(std::time::Duration::from_millis(if island_only { 600 } else { 1500 })).await;
             }
         });
         #[cfg(target_os = "linux")]
@@ -243,6 +270,12 @@ impl NotificationsModule {
             }
             (NotificationKind::Internal, a) if n.source.starts_with("download:") => {
                 crate::modules::downloads::action(st, &n.source, a)?;
+            }
+            (NotificationKind::Internal, a) if n.source.starts_with("phone") => {
+                st.phone.action(st, &n.source, a)?;
+            }
+            (NotificationKind::Internal, a) if n.source.starts_with("note:") => {
+                crate::modules::notes::reminder_action(st, &n.source, a)?;
             }
             (_, "open") => {
                 if let Some(target) = &n.open_target {

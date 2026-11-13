@@ -1,28 +1,9 @@
 // Окно настроек (отдельный WebView, создаётся по требованию и уничтожается при закрытии).
+// Разделы собраны в пять групп-«островов» слева: открытый остров раскрывается
+// и показывает свои разделы, содержимое раздела справа мягко выезжает.
 
 import { lazy, Suspense, useEffect, useState } from "react";
-import {
-  Bell,
-  Clipboard,
-  Cpu,
-  Gamepad2,
-  Gauge,
-  Info,
-  Keyboard,
-  LayoutGrid,
-  Monitor,
-  Move,
-  Music2,
-  Paintbrush,
-  Palette,
-  Plug,
-  Puzzle,
-  ScrollText,
-  Settings2,
-  Shield,
-  Users,
-  type LucideIcon,
-} from "lucide-react";
+import { Bell, ChevronRight, Cpu, Plug, Shield, type LucideIcon } from "lucide-react";
 import { Spinner } from "../components/ui";
 import { useEvent } from "../hooks/common";
 import { useTheme } from "../hooks/useTheme";
@@ -30,7 +11,7 @@ import { events } from "../services/ipc";
 import { useApp } from "../stores/app";
 import "../styles/settings.css";
 
-type SectionDef = { id: string; title: string; icon: LucideIcon; component: React.LazyExoticComponent<React.ComponentType> };
+type SectionDef = { id: string; title: string; component: React.LazyExoticComponent<React.ComponentType> };
 
 const S = (loader: () => Promise<Record<string, React.ComponentType>>, name: string) =>
   lazy(() => loader().then((m) => ({ default: m[name] })));
@@ -40,61 +21,142 @@ const integrations = () => import("../settings/sections/integrations");
 const plugins = () => import("../settings/sections/plugins");
 const personal = () => import("../settings/sections/personal");
 const system = () => import("../settings/sections/system");
+const phone = () => import("../settings/sections/phone");
 
-export const SECTIONS: SectionDef[] = [
-  { id: "general", title: "Общие", icon: Settings2, component: S(general, "GeneralSection") },
-  { id: "appearance", title: "Внешний вид", icon: Paintbrush, component: S(general, "AppearanceSection") },
-  { id: "position", title: "Положение панели", icon: Move, component: S(general, "PositionSection") },
-  { id: "cards", title: "Карточки", icon: LayoutGrid, component: S(modules, "CardsSection") },
-  { id: "notifications", title: "Уведомления", icon: Bell, component: S(modules, "NotificationsSection") },
-  { id: "music", title: "Музыка", icon: Music2, component: S(modules, "MusicSection") },
-  { id: "system-monitor", title: "Системный монитор", icon: Cpu, component: S(modules, "SystemMonitorSection") },
-  { id: "clipboard", title: "Буфер обмена", icon: Clipboard, component: S(modules, "ClipboardSection") },
-  { id: "integrations", title: "Интеграции", icon: Plug, component: S(integrations, "IntegrationsSection") },
-  { id: "plugins", title: "Плагины", icon: Puzzle, component: S(plugins, "PluginsSection") },
-  { id: "profiles", title: "Профили", icon: Users, component: S(personal, "ProfilesSection") },
-  { id: "themes", title: "Темы", icon: Palette, component: S(personal, "ThemesSection") },
-  { id: "hotkeys", title: "Горячие клавиши", icon: Keyboard, component: S(personal, "HotkeysSection") },
-  { id: "game-mode", title: "Игровой режим", icon: Gamepad2, component: S(system, "GameModeSection") },
-  { id: "performance", title: "Производительность", icon: Gauge, component: S(system, "PerformanceSection") },
-  { id: "monitors", title: "Несколько мониторов", icon: Monitor, component: S(system, "MonitorsSection") },
-  { id: "security", title: "Безопасность", icon: Shield, component: S(system, "SecuritySection") },
-  { id: "logs", title: "Журнал событий", icon: ScrollText, component: S(system, "LogsSection") },
-  { id: "about", title: "О программе", icon: Info, component: S(system, "AboutSection") },
+/** Значок группы «Остров» — сама пилюля. */
+function IslandIcon({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} aria-hidden>
+      <rect x="3" y="8" width="18" height="8" rx="4" />
+    </svg>
+  );
+}
+
+type GroupDef = { id: string; title: string; icon: LucideIcon | typeof IslandIcon; sections: SectionDef[] };
+
+export const GROUPS: GroupDef[] = [
+  {
+    id: "island",
+    title: "Остров",
+    icon: IslandIcon,
+    sections: [
+      { id: "general", title: "Общие", component: S(general, "GeneralSection") },
+      { id: "appearance", title: "Внешний вид", component: S(general, "AppearanceSection") },
+      { id: "position", title: "Положение", component: S(general, "PositionSection") },
+      { id: "cards", title: "Карточки", component: S(modules, "CardsSection") },
+      { id: "themes", title: "Темы", component: S(personal, "ThemesSection") },
+    ],
+  },
+  {
+    id: "media",
+    title: "Уведомления и медиа",
+    icon: Bell,
+    sections: [
+      { id: "notifications", title: "Уведомления", component: S(modules, "NotificationsSection") },
+      { id: "music", title: "Музыка", component: S(modules, "MusicSection") },
+      { id: "clipboard", title: "Буфер обмена", component: S(modules, "ClipboardSection") },
+    ],
+  },
+  {
+    id: "links",
+    title: "Подключения",
+    icon: Plug,
+    sections: [
+      { id: "phone", title: "Телефон", component: S(phone, "PhoneSection") },
+      { id: "integrations", title: "Интеграции", component: S(integrations, "IntegrationsSection") },
+      { id: "plugins", title: "Плагины", component: S(plugins, "PluginsSection") },
+      { id: "hotkeys", title: "Горячие клавиши", component: S(personal, "HotkeysSection") },
+    ],
+  },
+  {
+    id: "system",
+    title: "Система",
+    icon: Cpu,
+    sections: [
+      { id: "system-monitor", title: "Системный монитор", component: S(modules, "SystemMonitorSection") },
+      { id: "game-mode", title: "Игровой режим", component: S(system, "GameModeSection") },
+      { id: "performance", title: "Производительность", component: S(system, "PerformanceSection") },
+      { id: "monitors", title: "Мониторы", component: S(system, "MonitorsSection") },
+      { id: "profiles", title: "Профили", component: S(personal, "ProfilesSection") },
+    ],
+  },
+  {
+    id: "privacy",
+    title: "Приватность",
+    icon: Shield,
+    sections: [
+      { id: "security", title: "Безопасность", component: S(system, "SecuritySection") },
+      { id: "logs", title: "Журнал событий", component: S(system, "LogsSection") },
+      { id: "about", title: "О программе", component: S(system, "AboutSection") },
+    ],
+  },
 ];
+
+const ALL = GROUPS.flatMap((g) => g.sections.map((s) => ({ ...s, group: g.id })));
+export const SECTIONS = ALL;
+
+function groupOf(section: string): string {
+  return ALL.find((s) => s.id === section)?.group ?? "island";
+}
 
 export default function SettingsApp({ initialSection }: { initialSection: string | null }) {
   const ready = useApp((s) => s.ready);
-  const [section, setSection] = useState(SECTIONS.some((s) => s.id === initialSection) ? initialSection! : "general");
+  const [section, setSection] = useState(ALL.some((s) => s.id === initialSection) ? initialSection! : "notifications");
+  const [open, setOpen] = useState<string | null>(groupOf(section));
   useTheme("settings");
   useEffect(() => {
     useApp.getState().init().catch(console.error);
   }, []);
-  useEvent<string>(events.SETTINGS_NAVIGATE, (s) => SECTIONS.some((x) => x.id === s) && setSection(s));
+  useEvent<string>(events.SETTINGS_NAVIGATE, (s) => {
+    if (ALL.some((x) => x.id === s)) {
+      setSection(s);
+      setOpen(groupOf(s));
+    }
+  });
 
   if (!ready) return <div className="settings-loading"><Spinner size={22} /></div>;
-  const current = SECTIONS.find((s) => s.id === section)!;
+  const current = ALL.find((s) => s.id === section)!;
   const Comp = current.component;
   return (
     <div className="settings">
-      <nav className="sidebar">
-        <div className="brand">
-          <span className="brand-pill" />
-          <span>Desktop Island</span>
-        </div>
-        {SECTIONS.map((s) => (
-          <button key={s.id} type="button" className={`nav-item ${s.id === section ? "on" : ""}`} onClick={() => setSection(s.id)}>
-            <s.icon size={16} />
-            <span>{s.title}</span>
-          </button>
-        ))}
+      <nav className="isles scroll" aria-label="Разделы настроек">
+        {GROUPS.map((g) => {
+          const isOpen = open === g.id;
+          const Icon = g.icon;
+          return (
+            <div key={g.id} className={`isle ${isOpen ? "open" : ""}`}>
+              <button type="button" className="isle-head" aria-expanded={isOpen} onClick={() => setOpen(isOpen ? null : g.id)}>
+                <Icon size={18} />
+                <span className="isle-title">{g.title}</span>
+                <span className="isle-count">{g.sections.length}</span>
+                <ChevronRight size={14} className="isle-chev" />
+              </button>
+              {isOpen && (
+                <div className="isle-list">
+                  {g.sections.map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      className={`isle-item ${s.id === section ? "on" : ""}`}
+                      aria-current={s.id === section ? "page" : undefined}
+                      onClick={() => setSection(s.id)}
+                    >
+                      {s.title}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </nav>
       <main className="content scroll">
         <Suspense fallback={<div className="center"><Spinner /></div>}>
-          <Comp key={current.id} />
+          <div className="section-enter" key={current.id}>
+            <Comp />
+          </div>
         </Suspense>
       </main>
     </div>
   );
 }
-

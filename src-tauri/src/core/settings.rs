@@ -14,6 +14,7 @@ pub struct GeneralSettings {
     pub launch_at_startup: bool,
     /// Если включено — закрытие окон не завершает приложение.
     pub background_mode: bool,
+    /// Устарело (не используется): остров всегда показывается при запуске.
     pub start_hidden: bool,
     pub language: String,
     /// Проверять новые версии на GitHub (запрос к api.github.com без каких-либо данных пользователя).
@@ -45,6 +46,10 @@ pub struct AppearanceSettings {
     pub animations: AnimationLevel,
     pub animation_speed: f32,
     pub scale: f32,
+    /// Цвет острова: graphite | grey | black.
+    pub island_tone: String,
+    /// Приветствие («Доброе утро», «Добрый вечер»…) при включении и пробуждении.
+    pub greeting: bool,
 }
 impl Default for AppearanceSettings {
     fn default() -> Self {
@@ -57,6 +62,8 @@ impl Default for AppearanceSettings {
             animations: AnimationLevel::Full,
             animation_speed: 1.0,
             scale: 1.0,
+            island_tone: "graphite".into(),
+            greeting: true,
         }
     }
 }
@@ -76,14 +83,24 @@ impl Default for Placement {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(default, rename_all = "camelCase")]
 pub struct PositionSettings {
     /// Имя монитора, на котором должна находиться панель. `None` — основной.
     pub monitor: Option<String>,
     pub placements: BTreeMap<String, Placement>,
     pub locked: bool,
+    /// edge — остров вырастает из верхнего края экрана, float — висит чуть ниже края.
+    pub style: String,
 }
+impl Default for PositionSettings {
+    fn default() -> Self {
+        Self { monitor: None, placements: BTreeMap::new(), locked: false, style: "float".into() }
+    }
+}
+
+/// Отступ плавающего острова от верхнего края экрана (логические пиксели).
+pub const FLOAT_TOP: f64 = 10.0;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -186,6 +203,10 @@ pub struct NotificationSettings {
     pub app_rules: Vec<AppRule>,
     /// Уведомления других приложений показываются только в острове, без системных баннеров.
     pub island_only: bool,
+    /// Свой короткий звук острова при новом уведомлении.
+    pub sound: bool,
+    /// Несколько уведомлений одного приложения показываются одной группой.
+    pub group_by_app: bool,
 }
 impl Default for NotificationSettings {
     fn default() -> Self {
@@ -199,7 +220,28 @@ impl Default for NotificationSettings {
             show_body: true,
             app_rules: vec![],
             island_only: true,
+            sound: true,
+            group_by_app: true,
         }
+    }
+}
+
+/// Связь с телефоном (протокол KDE Connect).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default, rename_all = "camelCase")]
+pub struct PhoneSettings {
+    pub enabled: bool,
+    /// Имя этого компьютера, которое видит телефон.
+    pub device_name: String,
+    pub notifications: bool,
+    pub calls: bool,
+    pub clipboard: bool,
+    pub battery: bool,
+    pub media: bool,
+}
+impl Default for PhoneSettings {
+    fn default() -> Self {
+        Self { enabled: true, device_name: String::new(), notifications: true, calls: true, clipboard: true, battery: true, media: false }
     }
 }
 
@@ -379,6 +421,7 @@ pub struct Settings {
     pub logging: LoggingSettings,
     pub profiles: ProfilesSettings,
     pub apps: AppsSettings,
+    pub phone: PhoneSettings,
 }
 
 pub const SECTIONS: &[&str] = &[
@@ -396,6 +439,7 @@ pub const SECTIONS: &[&str] = &[
     "logging",
     "profiles",
     "apps",
+    "phone",
 ];
 
 /// Разделы, которые сохраняются в профиль.
@@ -440,6 +484,13 @@ impl Settings {
         a.radius = a.radius.clamp(6, 40);
         a.animation_speed = if a.animation_speed.is_finite() { a.animation_speed.clamp(0.25, 3.0) } else { 1.0 };
         a.scale = if a.scale.is_finite() { a.scale.clamp(0.75, 1.5) } else { 1.0 };
+        if !matches!(a.island_tone.as_str(), "graphite" | "grey" | "black") {
+            a.island_tone = "graphite".into();
+        }
+        if !matches!(self.position.style.as_str(), "edge" | "float") {
+            self.position.style = "float".into();
+        }
+        self.phone.device_name = self.phone.device_name.trim().chars().filter(|c| !c.is_control()).take(48).collect();
 
         for p in self.position.placements.values_mut() {
             if !p.rel_x.is_finite() {

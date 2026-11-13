@@ -114,9 +114,15 @@ export function NotificationsSection() {
         </Field>
         <Field
           label="Только в острове"
-          description="Системные всплывающие окна не показываются: уведомление приходит только в остров. Если скрыть остров или выйти из программы, система снова показывает уведомления сама."
+          description="Баннеры и звук Windows приглушаются режимом «Не беспокоить», уведомления приходят только в остров. После выхода из программы всё возвращается как было. Если Telegram присылает только «Новое сообщение», выключите в его настройках уведомлений учёт режима фокусировки"
         >
           <Toggle checked={n.islandOnly} disabled={!n.listenSystem} onChange={(v) => set({ islandOnly: v })} />
+        </Field>
+        <Field label="Звук уведомлений" description="Короткий тихий сигнал острова">
+          <Toggle checked={n.sound ?? true} onChange={(v) => set({ sound: v })} />
+        </Field>
+        <Field label="Группировать по приложениям" description="Несколько сообщений одного приложения — одна карточка со счётчиком">
+          <Toggle checked={n.groupByApp ?? true} onChange={(v) => set({ groupByApp: v })} />
         </Field>
         {status.data && !status.data.available && (
           <Note kind="warn">

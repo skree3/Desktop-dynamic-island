@@ -213,7 +213,7 @@ impl TimersModule {
             t.elapsed_ms = t.duration_ms;
             t.started_at = None;
             let _ = self.save(&st.db, &t);
-            st.events.push(IslandNotification {
+            st.events.push(IslandNotification { stack: Vec::new(), count: 1,
                 id: uuid::Uuid::new_v4().to_string(),
                 kind: NotificationKind::Timer,
                 source: format!("timer:{}", t.id),

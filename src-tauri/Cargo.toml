@@ -1,6 +1,6 @@
 [package]
 name = "desktop-island"
-version = "0.3.0"
+version = "1.0.0"
 description = "Desktop Island вЂ” РёРЅС‚РµСЂР°РєС‚РёРІРЅР°СЏ СЃРёСЃС‚РµРјРЅР°СЏ РїР°РЅРµР»СЊ РґР»СЏ Windows Рё Linux"
 edition = "2021"
 rust-version = "1.80"
@@ -21,7 +21,7 @@ tauri-plugin-single-instance = "2"
 tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "process", "fs"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "process", "fs", "net", "io-util"] }
 sysinfo = { version = "0.33", default-features = false, features = ["system", "disk", "network", "component"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
 tracing = "0.1"
@@ -30,6 +30,14 @@ tracing-appender = "0.2"
 uuid = { version = "1", features = ["v4", "serde"] }
 thiserror = "2"
 base64 = "0.22"
+# Связь с телефоном (протокол KDE Connect): TLS с самоподписанными сертификатами.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
+rcgen = { version = "0.13", default-features = false, features = ["ring", "pem"] }
+socket2 = { version = "0.6", features = ["all"] }
+# Голосовые заметки: запись с микрофона в WAV.
+cpal = "0.15"
+hound = "3"
 png = "0.17"
 semver = "1"
 nvml-wrapper = "0.10"
@@ -63,6 +71,7 @@ windows = { version = "0.61", features = [
   "Win32_System_SystemServices",
   "Win32_System_SystemInformation",
   "Win32_System_Power",
+  "Win32_System_RemoteDesktop",
   "Win32_System_Shutdown",
   "Win32_System_Threading",
   "Win32_System_DataExchange",
@@ -91,6 +100,7 @@ arboard = { version = "3", default-features = false, features = ["image-data", "
 zbus = { version = "5", default-features = false, features = ["tokio", "blocking-api"] }
 x11rb = { version = "0.13", default-features = false, features = [] }
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
+gtk = "0.18"
 
 [dev-dependencies]
 tempfile = "3"

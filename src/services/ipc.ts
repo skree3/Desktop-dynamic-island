@@ -24,6 +24,7 @@ export const ipc = {
   setTimezone: (offsetMinutes: number) => call<void>("app_set_timezone", { offsetMinutes }),
   setActiveCards: (cards: string[], expanded: boolean) => call<void>("ui_set_active_cards", { cards, expanded }),
   islandResize: (width: number, height: number) => call<void>("island_resize", { width, height }),
+  islandHitbox: (width: number, height: number) => call<void>("island_hitbox", { width, height }),
   islandReady: () => call<void>("island_ready"),
   islandToggle: () => call<void>("island_toggle"),
   islandHideTemporarily: (minutes: number) => call<void>("island_hide_temporarily", { minutes }),
@@ -122,7 +123,18 @@ export const ipc = {
 
   // заметки
   notes: () => call<T.Note[]>("notes_list"),
-  noteCreate: (text: string, color?: string) => call<T.Note>("note_create", { text, color: color ?? null }),
+  noteCreate: (text: string, color?: string, extra?: { remindAt?: number | null; audio?: string | null; audioMs?: number | null }) =>
+    call<T.Note>("note_create", { text, color: color ?? null, remindAt: extra?.remindAt ?? null, audio: extra?.audio ?? null, audioMs: extra?.audioMs ?? null }),
+  noteRemind: (id: string, remindAt: number | null) => call<void>("note_remind", { id, remindAt }),
+  voiceStart: () => call<void>("voice_start"),
+  voiceStop: () => call<{ name: string; durationMs: number }>("voice_stop"),
+  voiceCancel: () => call<void>("voice_cancel"),
+  voiceData: (name: string) => call<string>("voice_data", { name }),
+  phoneStatus: () => call<T.PhoneStatus>("phone_status"),
+  phonePair: (id: string) => call<void>("phone_pair", { id }),
+  phoneUnpair: (id: string) => call<void>("phone_unpair", { id }),
+  phoneAccept: (id: string, accept: boolean) => call<void>("phone_accept", { id, accept }),
+  phoneRing: (id: string) => call<void>("phone_ring", { id }),
   noteUpdate: (id: string, patch: { text?: string; color?: string; pinned?: boolean }) =>
     call<void>("note_update", { id, text: patch.text ?? null, color: patch.color ?? null, pinned: patch.pinned ?? null }),
   noteDelete: (id: string) => call<void>("note_delete", { id }),

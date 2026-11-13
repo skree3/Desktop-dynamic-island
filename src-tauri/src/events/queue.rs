@@ -59,6 +59,42 @@ pub struct IslandNotification {
     /// Цель для «открыть приложение» (AUMID, путь, desktop-id), если известна.
     pub open_target: Option<String>,
     pub duration_ms: u64,
+    /// Предыдущие сообщения группы (новые сначала), если уведомления сгруппированы по приложению.
+    #[serde(default)]
+    pub stack: Vec<StackLine>,
+    /// Сколько уведомлений в группе (1 — одиночное).
+    #[serde(default = "one")]
+    pub count: u32,
+}
+
+fn one() -> u32 {
+    1
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct StackLine {
+    pub title: String,
+    pub body: String,
+    pub timestamp: i64,
+}
+
+/// Новое уведомление того же приложения становится верхним в группе.
+fn merge(into: &mut IslandNotification, n: IslandNotification) {
+    into.stack.insert(0, StackLine { title: std::mem::take(&mut into.title), body: std::mem::take(&mut into.body), timestamp: into.timestamp });
+    into.stack.truncate(4);
+    into.count = into.count.max(1) + 1;
+    into.title = n.title;
+    into.body = n.body;
+    into.timestamp = n.timestamp;
+    into.priority = into.priority.max(n.priority);
+    if n.icon.is_some() {
+        into.icon = n.icon;
+    }
+    if n.open_target.is_some() {
+        into.open_target = n.open_target;
+    }
+    into.source = n.source;
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -70,6 +106,8 @@ pub enum PushOutcome {
     /// Только в историю (DND, игровой режим, отключённое приложение).
     HistoryOnly(&'static str),
     Dropped(&'static str),
+    /// Добавлено в группу того же приложения (true — в показываемое сейчас).
+    Grouped(bool),
 }
 
 #[derive(Debug, Default)]
@@ -81,6 +119,8 @@ pub struct QueueState {
     pub dnd: bool,
     pub dnd_allow_critical: bool,
     pub suppressed: bool,
+    /// Группировать уведомления одного приложения.
+    pub group_by_app: bool,
     /// Сколько уведомлений пришло, пока панель была подавлена (игровой режим).
     pub missed_while_suppressed: u32,
 }
@@ -145,6 +185,20 @@ impl QueueState {
             return PushOutcome::HistoryOnly("не беспокоить");
         }
 
+        // Группируются уведомления приложений: системные и пришедшие с телефона.
+        let groupable = |o: &IslandNotification| o.kind == NotificationKind::System || o.source.starts_with("phone:");
+        if self.group_by_app && groupable(&n) {
+            let same = |o: &IslandNotification| groupable(o) && o.app_name.to_lowercase() == app_lower;
+            if let Some(cur) = self.current.as_mut().filter(|c| same(c)) {
+                merge(cur, n);
+                return PushOutcome::Grouped(true);
+            }
+            if let Some(q) = self.queue.iter_mut().find(|o| same(o)) {
+                merge(q, n);
+                return PushOutcome::Grouped(false);
+            }
+        }
+
         if let Some(cur) = &self.current {
             if n.priority == Priority::Critical && cur.priority < Priority::Critical {
                 let prev = self.current.take().unwrap();
@@ -186,7 +240,7 @@ mod tests {
     use super::*;
 
     fn n(id: &str, p: Priority, ts: i64) -> IslandNotification {
-        IslandNotification {
+        IslandNotification { stack: Vec::new(), count: 1,
             id: id.into(),
             kind: NotificationKind::Internal,
             source: format!("src-{id}"),
@@ -225,6 +279,25 @@ mod tests {
         assert_eq!(q.current.as_ref().unwrap().id, "x");
         q.dismiss("x");
         assert_eq!(q.advance().unwrap().id, "a");
+    }
+
+    #[test]
+    fn same_app_notifications_are_grouped() {
+        let mut q = QueueState::new(10);
+        q.group_by_app = true;
+        let rules = RuleView { muted_apps: &[], priority_overrides: &[] };
+        let mut a = n("1", Priority::Normal, 1);
+        a.kind = NotificationKind::System;
+        let mut b = n("2", Priority::Normal, 5000);
+        b.kind = NotificationKind::System;
+        assert_eq!(q.push(a, &rules), PushOutcome::Queued);
+        q.advance();
+        assert_eq!(q.push(b, &rules), PushOutcome::Grouped(true));
+        let cur = q.current.as_ref().unwrap();
+        assert_eq!(cur.count, 2);
+        assert_eq!(cur.title, "t2");
+        assert_eq!(cur.stack[0].title, "t1");
+        assert!(q.queue.is_empty());
     }
 
     #[test]

@@ -1,12 +1,14 @@
 // Заметки: быстрая запись прямо в острове, редактирование по клику, цвета, закрепление.
 
 import { useEffect, useRef, useState } from "react";
-import { Pin, PinOff, Plus, Trash2 } from "lucide-react";
+import { Bell, Mic, Pin, PinOff, Play, Plus, Square, Trash2, X } from "lucide-react";
 import { IconButton, Note as Hint } from "../components/ui";
 import { useEvent, useLoad, useNow } from "../hooks/common";
 import { errorMessage, ipc } from "../services/ipc";
 import type { Note } from "../types";
 import { formatRelative } from "../utils/format";
+import { parseReminder, reminderLabel } from "../utils/reminder";
+import { playVoice } from "../utils/voice";
 
 const COLORS: Record<string, string> = {
   default: "rgba(255,255,255,0.07)",
@@ -56,6 +58,22 @@ function NoteItem({ n, now, onError }: { n: Note; now: number; onError: (e: stri
           {n.text}
         </div>
       )}
+      {(n.remindAt || n.audio) && (
+        <div className="note-tags">
+          {n.remindAt && (
+            <span className={`note-remind ${n.reminded ? "done" : ""}`}>
+              <Bell size={12} />
+              {reminderLabel(n.remindAt, new Date(now))}
+            </span>
+          )}
+          {n.audio && (
+            <button type="button" className="note-play" onClick={() => playVoice(n.audio!).catch((e) => onError(errorMessage(e)))}>
+              <Play size={12} />
+              {Math.max(1, Math.round(n.audioMs / 1000))} с
+            </button>
+          )}
+        </div>
+      )}
       <div className="note-meta">
         <span className="small muted">{formatRelative(n.updatedAt, now)}</span>
         <div className="row" style={{ gap: 2 }}>
@@ -85,12 +103,38 @@ export default function NotesCard() {
   const now = useNow(60_000);
   useEvent("notes://changed", () => notes.reload());
 
+  const [recording, setRecording] = useState<{ since: number } | null>(null);
+  const [levels, setLevels] = useState<number[]>([]);
+  useEvent<number>("voice://level", (l) => setLevels((v) => [...v.slice(-23), l]));
+  const parsed = parseReminder(draft);
+
   const add = async () => {
     if (!draft.trim()) return;
     try {
-      await ipc.noteCreate(draft);
+      const r = parseReminder(draft);
+      await ipc.noteCreate(r && r.text ? r.text : draft, undefined, { remindAt: r?.at ?? null });
       setDraft("");
     } catch (e) {
+      setError(errorMessage(e));
+    }
+  };
+
+  const toggleRecord = async () => {
+    setError(null);
+    try {
+      if (!recording) {
+        await ipc.voiceStart();
+        setLevels([]);
+        setRecording({ since: Date.now() });
+        return;
+      }
+      setRecording(null);
+      const rec = await ipc.voiceStop();
+      const r = parseReminder(draft);
+      await ipc.noteCreate(r?.text || draft, undefined, { remindAt: r?.at ?? null, audio: rec.name, audioMs: rec.durationMs });
+      setDraft("");
+    } catch (e) {
+      setRecording(null);
       setError(errorMessage(e));
     }
   };
@@ -101,7 +145,7 @@ export default function NotesCard() {
       <div className="note-new">
         <textarea
           className="note-input"
-          placeholder="Новая заметка… (Enter — сохранить, Shift+Enter — новая строка)"
+          placeholder="Заметка или «позвонить маме в 18:30»"
           value={draft}
           rows={2}
           maxLength={10000}
@@ -113,10 +157,44 @@ export default function NotesCard() {
             }
           }}
         />
-        <IconButton title="Добавить" onClick={add} disabled={!draft.trim()}>
-          <Plus size={16} />
-        </IconButton>
+        <div className="note-buttons">
+          <IconButton title={recording ? "Остановить и сохранить" : "Голосовая заметка"} active={!!recording} onClick={toggleRecord}>
+            {recording ? <Square size={14} /> : <Mic size={16} />}
+          </IconButton>
+          {recording ? (
+            <IconButton
+              title="Отменить запись"
+              onClick={() => {
+                setRecording(null);
+                ipc.voiceCancel().catch(() => {});
+              }}
+            >
+              <X size={16} />
+            </IconButton>
+          ) : (
+            <IconButton title="Добавить" onClick={add} disabled={!draft.trim()}>
+              <Plus size={16} />
+            </IconButton>
+          )}
+        </div>
       </div>
+      {recording && (
+        <div className="voice-rec" aria-live="polite">
+          <span className="voice-dot" />
+          <span className="voice-wave" aria-hidden>
+            {Array.from({ length: 24 }, (_, i) => (
+              <i key={i} style={{ transform: `scaleY(${Math.max(0.12, Math.min(1, (levels[i] ?? 0) * 3))})` }} />
+            ))}
+          </span>
+          <span className="small muted mono">{Math.floor((now - recording.since) / 1000) >= 0 ? "идёт запись" : ""}</span>
+        </div>
+      )}
+      {!recording && parsed && (
+        <div className="note-hint small">
+          <Bell size={12} />
+          Напомню {reminderLabel(parsed.at)}
+        </div>
+      )}
       {error && <Hint kind="error">{error}</Hint>}
       <div className="notes-list scroll" style={{ maxHeight: 300 }}>
         {notes.data && list.length === 0 && <div className="empty small">Заметок пока нет</div>}

@@ -31,6 +31,7 @@ pub fn show_if_frontend_silent(app: &AppHandle, st: &Shared) {
         if !st.flags.user_hidden.load(Ordering::SeqCst) && !st.game_mode_active() {
             apply_position(&app, &st);
             show_island(&app, &st);
+            crate::modules::reconcile(&app, &st);
         }
         crate::tray::refresh(&app);
     });
@@ -132,7 +133,13 @@ pub fn apply_position(app: &AppHandle, st: &AppState) {
     let Some(win) = island(app) else { return };
     let Some(m) = target_monitor(app, st) else { return };
     let key = monitor_key(&m);
-    let placement = st.with_settings(|s| s.position.placements.get(&key).copied().unwrap_or_default());
+    let (mut placement, style) = st.with_settings(|s| (s.position.placements.get(&key).copied().unwrap_or_default(), s.position.style.clone()));
+    // «У края» — остров вырастает из верхнего края; «плавающий» — висит чуть ниже.
+    if style == "edge" {
+        placement.top = 0.0;
+    } else if placement.top < 4.0 {
+        placement.top = crate::core::settings::FLOAT_TOP;
+    }
     // В Linux до первой отрисовки окна outer_size() возвращает 0×0.
     let scale = m.scale_factor();
     let last = *LAST_LOGICAL.lock().unwrap_or_else(|p| p.into_inner());
@@ -245,10 +252,12 @@ fn save_current_placement(app: &AppHandle) {
     };
     let key = monitor_key(m);
     let mut top = ((pos.y - m.position().y) as f64 / m.scale_factor()).max(0.0);
-    // «Магнит»: рядом с верхним краем панель прилипает к нему.
-    let snap = top < 14.0;
+    // «Магнит»: рядом с верхним краем панель встаёт на своё место по стилю
+    // (вплотную к краю или на стандартном отступе), в стиле «у края» — всегда к краю.
+    let edge = st.with_settings(|s| s.position.style == "edge");
+    let snap = edge || top < 18.0;
     if snap {
-        top = 0.0;
+        top = if edge { 0.0 } else { crate::core::settings::FLOAT_TOP };
     }
     let placement = Placement { rel_x: ((cx - m.position().x) as f64 / m.size().width as f64).clamp(0.0, 1.0), top };
     SKIP_APPLY.store(true, Ordering::SeqCst);
@@ -319,6 +328,107 @@ pub fn start_monitor_watch(app: &AppHandle, st: &Shared) {
                 st2.log.info(category::APP, "monitors", "конфигурация мониторов изменилась — положение панели восстановлено");
                 apply_position(&app, &st2);
                 st2.events.emit("monitors://changed", list_monitors(&app));
+            }
+        }
+    });
+}
+
+/// Размер самого острова внутри окна (логические пиксели). Окно острова теперь
+/// постоянного размера — при раскрытии меняется только форма внутри, поэтому
+/// WebView не перестраивается на каждом кадре и остров не дёргается. Всё вне
+/// острова пропускает клики насквозь.
+static HITBOX: Mutex<(f64, f64)> = Mutex::new((240.0, 40.0));
+
+/// Экранный прямоугольник острова (физические пиксели): x, y, ширина, высота.
+pub fn island_rect(app: &AppHandle) -> Option<(i32, i32, i32, i32)> {
+    let win = island(app)?;
+    let pos = win.outer_position().ok()?;
+    let size = win.outer_size().ok()?;
+    let scale = win.scale_factor().unwrap_or(1.0);
+    let (w, h) = *HITBOX.lock().unwrap_or_else(|p| p.into_inner());
+    let (w, h) = ((w * scale).round() as i32, (h * scale).round() as i32);
+    let w = w.min(size.width as i32);
+    Some((pos.x + (size.width as i32 - w) / 2, pos.y, w, h.min(size.height as i32)))
+}
+
+pub fn set_hitbox(app: &AppHandle, logical_w: f64, logical_h: f64) {
+    *HITBOX.lock().unwrap_or_else(|p| p.into_inner()) = (logical_w.clamp(40.0, 1200.0), logical_h.clamp(16.0, 1200.0));
+    #[cfg(target_os = "linux")]
+    apply_input_shape(app);
+    #[cfg(not(target_os = "linux"))]
+    let _ = app;
+}
+
+/// Linux: окно принимает мышь только в области острова (input shape GTK) —
+/// работает и в X11, и в Wayland, где положение курсора узнать нельзя.
+#[cfg(target_os = "linux")]
+fn apply_input_shape(app: &AppHandle) {
+    let Some(win) = island(app) else { return };
+    let (w, h) = *HITBOX.lock().unwrap_or_else(|p| p.into_inner());
+    let win2 = win.clone();
+    let _ = win.run_on_main_thread(move || {
+        use gtk::prelude::*;
+        let Ok(gw) = win2.gtk_window() else { return };
+        let Some(gdk) = gw.window() else { return };
+        let width = gw.allocated_width();
+        let (w, h) = ((w as i32).min(width), h as i32);
+        let rect = gtk::cairo::RectangleInt::new((width - w) / 2, 0, w, h + 2);
+        let region = gtk::cairo::Region::create_rectangle(&rect);
+        gdk.input_shape_combine_region(&region, 0, 0);
+    });
+}
+
+/// Windows: курсор над островом — окно принимает мышь, вне острова — клики
+/// проходят к окнам под ним. Проверка 40 раз в секунду, переключение только
+/// при пересечении границы.
+#[cfg(windows)]
+pub fn start_hit_test(app: &AppHandle) {
+    let app = app.clone();
+    std::thread::Builder::new()
+        .name("island-hit-test".into())
+        .spawn(move || {
+            let mut through: Option<bool> = None;
+            loop {
+                std::thread::sleep(Duration::from_millis(25));
+                let Some(win) = island(&app) else { continue };
+                if !win.is_visible().unwrap_or(false) {
+                    through = None;
+                    continue;
+                }
+                let (Some((x, y, w, h)), Some(p)) = (island_rect(&app), crate::platform::os::dragdrop::cursor()) else { continue };
+                let inside = p.x >= x - 2 && p.x < x + w + 2 && p.y >= y - 2 && p.y < y + h + 2;
+                // Пока зажата кнопка мыши (перетаскивание острова), состояние не меняем.
+                if crate::platform::os::dragdrop::primary_button_down() && through == Some(false) {
+                    continue;
+                }
+                if through != Some(!inside) {
+                    through = Some(!inside);
+                    let _ = win.set_ignore_cursor_events(!inside);
+                }
+            }
+        })
+        .ok();
+}
+
+/// После входа в систему оболочка (Проводник, DWM, драйвер видео) ещё
+/// запускается и может «потерять» остров: окно уже показано, но не видно.
+/// Несколько раз в первые секунды возвращаем его на место и заставляем
+/// перерисоваться. Заодно проверяется, что остров действительно показан.
+pub fn refresh_after_boot(app: &AppHandle, st: &Shared) {
+    let (app, st) = (app.clone(), st.clone());
+    tauri::async_runtime::spawn(async move {
+        for secs in [3u64, 6, 12, 25] {
+            tokio::time::sleep(Duration::from_secs(secs)).await;
+            if st.flags.user_hidden.load(Ordering::SeqCst) || st.game_mode_active() {
+                continue;
+            }
+            apply_position(&app, &st);
+            show_island(&app, &st);
+            let last = *LAST_LOGICAL.lock().unwrap_or_else(|p| p.into_inner());
+            if let Some((w, h)) = last {
+                resize_island(&app, &st, w, h + 1.0);
+                tokio::time::sleep(Duration::from_millis(80)).await;
+                resize_island(&app, &st, w, h);
             }
         }
     });

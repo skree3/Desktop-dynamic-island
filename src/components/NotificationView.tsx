@@ -28,11 +28,22 @@ export function NotificationView({ n }: { n: IslandNotification }) {
       <div className="notif-body" key={`b-${n.id}`}>
         <div className="notif-head">
           <span className="notif-app">{n.appName}</span>
+          {(n.count ?? 1) > 1 && <span className="notif-count">{n.count}</span>}
           <span className="notif-time">{formatTime(n.timestamp)}</span>
           {queued > 0 && <span className="badge">+{queued}</span>}
         </div>
-        <div className="notif-title">{n.title}</div>
+        <div className="notif-title" key={`t-${n.timestamp}`}>{n.title}</div>
         {n.body && <div className="notif-text">{n.body}</div>}
+        {!!n.stack?.length && (
+          <div className="notif-stack">
+            {n.stack.slice(0, 2).map((m) => (
+              <div key={m.timestamp} className="notif-stack-line">
+                {m.title}
+                {m.body ? `: ${m.body}` : ""}
+              </div>
+            ))}
+          </div>
+        )}
         {n.actions.length > 0 && (
           <div className="notif-actions">
             {n.actions.map((a) => (

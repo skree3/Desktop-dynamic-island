@@ -12,6 +12,7 @@ import { useIsland } from "../stores/island";
 import type { CardInfo } from "../types";
 import { IconButton, Spinner } from "./ui";
 import { ErrorBoundary } from "./ErrorBoundary";
+import { LyricsView } from "./LyricsView";
 
 let lastIndex = 0;
 
@@ -19,7 +20,8 @@ export function ExpandedView({ panels, onHeight }: { panels: CardInfo[]; onHeigh
   const activeCard = useIsland((s) => s.activeCard);
   const animations = useApp((s) => s.settings?.appearance.animations);
   const innerRef = useRef<HTMLDivElement>(null);
-  const index = Math.max(0, panels.findIndex((c) => c.id === activeCard));
+  const lyricsOpen = activeCard === "lyrics";
+  const index = Math.max(0, panels.findIndex((c) => c.id === (lyricsOpen ? "music" : activeCard)));
   const active = panels[index];
   const meta = active ? metaFor(active.id) : null;
   const Card = meta?.component;
@@ -36,12 +38,12 @@ export function ExpandedView({ panels, onHeight }: { panels: CardInfo[]; onHeigh
     const ro = new ResizeObserver(report);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [active?.id, onHeight]);
+  }, [active?.id, lyricsOpen, onHeight]);
 
   return (
     <div className="expanded">
       <div className="expanded-head">
-        <span className="panel-title">{active?.title ?? ""}</span>
+        <span className="panel-title">{lyricsOpen ? "Текст песни" : (active?.title ?? "")}</span>
         <div className="dots" role="tablist">
           {panels.map((c) => (
             <button
@@ -68,7 +70,7 @@ export function ExpandedView({ panels, onHeight }: { panels: CardInfo[]; onHeigh
       <div className="expanded-content">
         <AnimatePresence mode="popLayout" initial={false} custom={dir}>
           <motion.div
-            key={active?.id ?? "none"}
+            key={lyricsOpen ? "lyrics" : (active?.id ?? "none")}
             ref={innerRef}
             className="panel"
             custom={dir}
@@ -77,7 +79,9 @@ export function ExpandedView({ panels, onHeight }: { panels: CardInfo[]; onHeigh
             exit={{ opacity: 0, x: -dir * slide, transition: { duration: 0.1 } }}
             transition={{ type: "spring", stiffness: 500, damping: 40 }}
           >
-            {!active ? (
+            {lyricsOpen ? (
+              <LyricsView />
+            ) : !active ? (
               <div className="card-pad muted">Все панели скрыты. Включите их в «Настройки → Карточки».</div>
             ) : Card ? (
               <ErrorBoundary key={active.id} title={active.title}>

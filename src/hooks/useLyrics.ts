@@ -28,6 +28,21 @@ export function currentLine(lines: [number, string][], posMs: number): string | 
   return text || null;
 }
 
+/** Индекс строки, которая звучит в момент `posMs` (-1 — до первой строки). */
+export function lineIndex(lines: [number, string][], posMs: number): number {
+  let lo = 0;
+  let hi = lines.length - 1;
+  let found = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (lines[mid][0] <= posMs) {
+      found = mid;
+      lo = mid + 1;
+    } else hi = mid - 1;
+  }
+  return found;
+}
+
 export function useLyrics(s: MediaSession | null): Lyrics | null {
   const enabled = useApp((st) => !!st.settings?.music.lyrics);
   const key = s && enabled && s.title && s.artist ? trackKey(s) : null;

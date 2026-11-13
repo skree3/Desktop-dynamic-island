@@ -442,7 +442,7 @@ impl PluginManager {
                             .collect()
                     })
                     .unwrap_or_default();
-                let n = IslandNotification {
+                let n = IslandNotification { stack: Vec::new(), count: 1,
                     id: uuid::Uuid::new_v4().to_string(),
                     kind: NotificationKind::Plugin,
                     source: format!("plugin:{id}"),

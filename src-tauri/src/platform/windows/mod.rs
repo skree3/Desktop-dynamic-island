@@ -18,6 +18,8 @@ pub mod notifications;
 pub mod power;
 pub mod privacy;
 pub mod proxy;
+pub mod quiet;
+pub mod session;
 pub mod shell;
 pub mod unread;
 pub mod window;

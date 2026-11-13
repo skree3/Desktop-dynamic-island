@@ -12,7 +12,7 @@ use std::sync::{Mutex, MutexGuard};
 use crate::core::error::{AppError, AppResult};
 
 /// Список миграций по порядку. Индекс + 1 = версия схемы.
-const MIGRATIONS: &[&str] = &[include_str!("../../migrations/0001_init.sql"), include_str!("../../migrations/0002_compact_panels.sql"), include_str!("../../migrations/0003_notes_shelf.sql")];
+const MIGRATIONS: &[&str] = &[include_str!("../../migrations/0001_init.sql"), include_str!("../../migrations/0002_compact_panels.sql"), include_str!("../../migrations/0003_notes_shelf.sql"), include_str!("../../migrations/0004_reminders.sql")];
 
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]

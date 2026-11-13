@@ -43,7 +43,10 @@ export function useTheme(target: "island" | "settings") {
     set("--danger", palette.danger);
     set("--success", palette.success);
     set("--warning", palette.warning);
-    root.style.setProperty("--island-bg", hexToRgba(palette.bg ?? "#000000", target === "island" ? appearance.opacity : 1));
+    // Цвет самого острова: графит, серый или чёрный (в тёмном режиме).
+    const tones: Record<string, string> = { graphite: "#1c1c1f", grey: "#2a2a2e", black: "#000000" };
+    const islandBg = target === "island" && mode === "dark" ? tones[appearance.islandTone ?? "graphite"] ?? palette.bg : palette.bg;
+    root.style.setProperty("--island-bg", hexToRgba(islandBg ?? "#000000", target === "island" ? appearance.opacity : 1));
     root.style.setProperty("--radius", `${appearance.radius}px`);
     root.style.setProperty("--scale", String(appearance.scale));
     root.dataset.mode = mode;

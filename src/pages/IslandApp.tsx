@@ -12,6 +12,7 @@ import { useSys } from "../stores/sysmon";
 import { useTimers } from "../stores/timers";
 import type { Activity, GameModeState, MediaSession, NotificationPayload, PrivacyState, SysSnapshot, Timer } from "../types";
 import "../styles/island.css";
+import { greetingText, playVoice } from "../utils/voice";
 
 export default function IslandApp() {
   const ready = useApp((s) => s.ready);
@@ -28,6 +29,16 @@ export default function IslandApp() {
     unsubs.push(on<Timer[]>(events.TIMERS_CHANGED, (t) => useTimers.getState().set(t)));
     unsubs.push(on<boolean>("island://attached", (a) => useIsland.getState().setAttached(a)));
     unsubs.push(on<PrivacyState>("privacy://state", (p) => useIsland.getState().setPrivacy(p)));
+    unsubs.push(on<string>("voice://play", (name) => playVoice(name).catch(() => {})));
+    let greetTimer: number | undefined;
+    unsubs.push(
+      on<string>("island://greet", (reason) => {
+        if (useApp.getState().settings?.appearance.greeting === false) return;
+        window.clearTimeout(greetTimer);
+        useIsland.getState().setGreeting(greetingText(reason));
+        greetTimer = window.setTimeout(() => useIsland.getState().setGreeting(null), 3600);
+      }),
+    );
     ipc.privacyState().then((p) => useIsland.getState().setPrivacy(p)).catch(() => {});
     ipc.islandAttached().then((a) => useIsland.getState().setAttached(a)).catch(() => {});
     unsubs.push(

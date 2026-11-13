@@ -17,7 +17,7 @@ log "Установка системных зависимостей"
 if command -v apt-get >/dev/null 2>&1; then
   $SUDO apt-get update
   $SUDO apt-get install -y build-essential curl wget file pkg-config libssl-dev \
-    libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev \
+    libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libasound2-dev \
     rpm xdg-utils
 elif command -v dnf >/dev/null 2>&1; then
   $SUDO dnf install -y webkit2gtk4.1-devel gtk3-devel libappindicator-gtk3-devel librsvg2-devel \

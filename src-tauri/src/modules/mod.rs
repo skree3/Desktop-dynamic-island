@@ -11,6 +11,9 @@ pub mod music;
 pub mod notes;
 pub mod notifications;
 pub mod privacy;
+pub mod phone;
+pub mod voice;
+pub mod greeting;
 pub mod shelf;
 pub mod system_monitor;
 pub mod timers;
@@ -124,5 +127,6 @@ pub fn reconcile(app: &AppHandle, st: &Shared) {
     st.battery.set_running(app, st, s.modules.battery);
     st.privacy.set_running(app, st, s.modules.privacy);
     st.downloads.set_running(app, st, s.modules.downloads);
+    st.phone.set_running(app, st, s.phone.enabled);
     st.updater.set_running(app, st, s.general.check_updates);
 }

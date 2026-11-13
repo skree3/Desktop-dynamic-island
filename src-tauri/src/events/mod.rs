@@ -111,6 +111,7 @@ impl EventManager {
         }
         g.queue.dnd = s.dnd;
         g.queue.dnd_allow_critical = s.dnd_allow_critical;
+        g.queue.group_by_app = s.group_by_app;
         g.default_duration_ms = s.duration_secs as u64 * 1000;
         g.muted = s.app_rules.iter().filter(|r| r.muted).map(|r| r.app.clone()).collect();
         g.overrides = s
@@ -163,10 +164,13 @@ impl EventManager {
         muted.extend(g.extra_muted.iter().cloned());
         let overrides = g.overrides.clone();
         let outcome = g.queue.push(n, &RuleView { muted_apps: &muted, priority_overrides: &overrides });
-        let preempted = outcome == PushOutcome::Preempted;
+        let preempted = matches!(outcome, PushOutcome::Preempted | PushOutcome::Grouped(true));
         drop(g);
         if preempted {
+            // Новое сообщение в показываемой группе — показываем его заново на полное время.
             self.start_timer();
+            self.broadcast_notification();
+        } else if outcome == PushOutcome::Grouped(false) {
             self.broadcast_notification();
         } else {
             self.pump();
@@ -236,6 +240,17 @@ impl EventManager {
             self.pump();
         } else {
             self.broadcast_notification();
+        }
+    }
+
+    /// Закрывает показываемые и ожидающие уведомления указанного источника.
+    pub fn dismiss_source(self: &Arc<Self>, source: &str) {
+        let ids: Vec<String> = {
+            let g = self.lock();
+            g.queue.current.iter().chain(g.queue.queue.iter()).filter(|n| n.source == source).map(|n| n.id.clone()).collect()
+        };
+        for id in ids {
+            self.dismiss(&id);
         }
     }
 
@@ -336,7 +351,7 @@ impl EventManager {
 
 /// Удобный конструктор внутренних уведомлений.
 pub fn internal_notification(source: &str, app_name: &str, title: impl Into<String>, body: impl Into<String>, priority: Priority) -> IslandNotification {
-    IslandNotification {
+    IslandNotification { stack: Vec::new(), count: 1,
         id: uuid::Uuid::new_v4().to_string(),
         kind: NotificationKind::Internal,
         source: source.into(),

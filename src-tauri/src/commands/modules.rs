@@ -411,9 +411,75 @@ pub async fn notes_list(state: State<'_, Shared>) -> AppResult<Vec<crate::module
 }
 
 #[tauri::command]
-pub async fn note_create(state: State<'_, Shared>, text: String, color: Option<String>) -> AppResult<crate::modules::notes::Note> {
+pub async fn note_create(
+    state: State<'_, Shared>,
+    text: String,
+    color: Option<String>,
+    remind_at: Option<i64>,
+    audio: Option<String>,
+    audio_ms: Option<i64>,
+) -> AppResult<crate::modules::notes::Note> {
     require(&state, "notes")?;
-    crate::modules::notes::create(state.inner(), &text, color.as_deref().unwrap_or("default"))
+    let audio = audio.map(|a| (a, audio_ms.unwrap_or(0)));
+    crate::modules::notes::create(state.inner(), &text, color.as_deref().unwrap_or("default"), remind_at, audio)
+}
+
+#[tauri::command]
+pub async fn note_remind(state: State<'_, Shared>, id: String, remind_at: Option<i64>) -> AppResult<()> {
+    crate::modules::notes::set_reminder(state.inner(), &id, remind_at)
+}
+
+// ---- голосовые заметки ----
+
+#[tauri::command]
+pub async fn voice_start(state: State<'_, Shared>) -> AppResult<()> {
+    let st = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || st.voice.start(&st)).await?
+}
+
+#[tauri::command]
+pub async fn voice_stop(state: State<'_, Shared>) -> AppResult<crate::modules::voice::Recorded> {
+    let st = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || st.voice.stop()).await?
+}
+
+#[tauri::command]
+pub async fn voice_cancel(state: State<'_, Shared>) -> AppResult<()> {
+    let st = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || st.voice.cancel(&st)).await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn voice_data(state: State<'_, Shared>, name: String) -> AppResult<String> {
+    crate::modules::voice::data_url(state.inner(), &name)
+}
+
+// ---- телефон ----
+
+#[tauri::command]
+pub async fn phone_status(state: State<'_, Shared>) -> AppResult<crate::modules::phone::PhoneStatus> {
+    Ok(state.phone.status(state.inner()))
+}
+
+#[tauri::command]
+pub async fn phone_pair(state: State<'_, Shared>, id: String) -> AppResult<()> {
+    state.phone.pair(state.inner(), &id)
+}
+
+#[tauri::command]
+pub async fn phone_unpair(state: State<'_, Shared>, id: String) -> AppResult<()> {
+    state.phone.unpair(state.inner(), &id)
+}
+
+#[tauri::command]
+pub async fn phone_accept(state: State<'_, Shared>, id: String, accept: bool) -> AppResult<()> {
+    state.phone.accept(state.inner(), &id, accept)
+}
+
+#[tauri::command]
+pub async fn phone_ring(state: State<'_, Shared>, id: String) -> AppResult<()> {
+    state.phone.ring(&id)
 }
 
 #[tauri::command]

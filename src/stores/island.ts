@@ -26,6 +26,9 @@ interface IslandStore {
   gameMode: GameModeState;
   /** Кто использует микрофон и камеру. */
   privacy: PrivacyState;
+  /** Приветствие, показываемое в свёрнутом острове несколько секунд. */
+  greeting: string | null;
+  setGreeting: (g: string | null) => void;
   expand: (card?: string | null) => void;
   collapse: () => void;
   setCard: (card: string) => void;
@@ -48,6 +51,8 @@ export const useIsland = create<IslandStore>((set, get) => ({
   activities: [],
   gameMode: { active: false, reason: null, app: null },
   privacy: { microphone: [], camera: [], micMuted: null },
+  greeting: null,
+  setGreeting: (greeting) => set({ greeting }),
 
   expand: (card) => set({ mode: "expanded", activeCard: card ?? get().activeCard }),
   collapse: () => {

@@ -33,11 +33,25 @@ function useShellSpring(): { shell: Transition; content: Transition; ms: number 
   };
 }
 
-function useWindowFit(width: number, height: number, settleMs: number) {
+/** Окно острова постоянного размера: самый большой вид острова плюс поле под тень.
+ *  Меняется только форма внутри — WebView не перестраивается на каждом кадре,
+ *  поэтому остров не дёргается. */
+const FRAME_W = 384;
+const SHADOW = 24;
+
+function useFixedFrame(scale: number) {
+  useEffect(() => {
+    ipc.islandResize(Math.ceil(FRAME_W * scale + SIDE * 2), Math.ceil(MAX_EXPANDED_H * scale + SHADOW)).catch(() => {});
+  }, [scale]);
+}
+
+/** Область, где остров принимает мышь (остальное окно пропускает клики насквозь).
+ *  При росте — сразу, при уменьшении — после анимации, чтобы край не «отрезал» клик. */
+function useHitbox(width: number, height: number, settleMs: number) {
   const last = useRef({ w: 0, h: 0 });
   const timer = useRef<number | undefined>(undefined);
   useEffect(() => {
-    const W = Math.ceil(width + SIDE * 2);
+    const W = Math.ceil(width);
     const H = Math.ceil(height + 1);
     window.clearTimeout(timer.current);
     const prev = last.current;
@@ -45,15 +59,39 @@ function useWindowFit(width: number, height: number, settleMs: number) {
     const grow = { w: Math.max(W, prev.w), h: Math.max(H, prev.h) };
     if (grow.w !== prev.w || grow.h !== prev.h) {
       last.current = grow;
-      ipc.islandResize(grow.w, grow.h).catch(() => {});
+      ipc.islandHitbox(grow.w, grow.h).catch(() => {});
     }
     if (grow.w !== W || grow.h !== H) {
       timer.current = window.setTimeout(() => {
         last.current = { w: W, h: H };
-        ipc.islandResize(W, H).catch(() => {});
+        ipc.islandHitbox(W, H).catch(() => {});
       }, settleMs + 40);
     }
   }, [width, height, settleMs]);
+}
+
+/** Короткий мягкий сигнал острова (вместо системного звука Windows). */
+let audioCtx: AudioContext | null = null;
+export function chime() {
+  try {
+    audioCtx ??= new AudioContext();
+    const ctx = audioCtx;
+    const t = ctx.currentTime;
+    for (const [freq, at] of [[880, 0], [1320, 0.09]] as const) {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = "sine";
+      o.frequency.value = freq;
+      g.gain.setValueAtTime(0, t + at);
+      g.gain.linearRampToValueAtTime(0.06, t + at + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + at + 0.32);
+      o.connect(g).connect(ctx.destination);
+      o.start(t + at);
+      o.stop(t + at + 0.34);
+    }
+  } catch {
+    /* звук недоступен — не страшно */
+  }
 }
 
 export function Island() {
@@ -77,19 +115,31 @@ export function Island() {
   }, [cards, activeCard]);
 
   const top = pickCompact(activities);
-  const wide = !!top && (top.kind === "music" ? settings.music.showInCompact : true);
+  const greeting = useIsland((s) => s.greeting);
+  const wide = !!greeting || (!!top && (top.kind === "music" ? settings.music.showInCompact : true));
 
   const size = useMemo(() => {
     if (mode === "expanded") return { w: 384 * scale, h: Math.min(MAX_EXPANDED_H, HEADER_H + contentH) * scale };
-    if (mode === "notification" && notification) return { w: 360 * scale, h: (notification.actions.length ? 104 : 76) * scale };
+    if (mode === "notification" && notification) {
+      const stackLines = Math.min(2, notification.stack?.length ?? 0);
+      return { w: 360 * scale, h: ((notification.actions.length ? 104 : 76) + stackLines * 17) * scale };
+    }
     const w = (wide ? 280 : settings.systemMonitor.showInCompact ? 244 : 200) * scale;
     return hovered ? { w: w + 12 * scale, h: (COMPACT_H + 2) * scale } : { w, h: COMPACT_H * scale };
   }, [mode, contentH, notification, wide, hovered, scale, settings.systemMonitor.showInCompact]);
 
-  const radius = mode === "expanded" ? 26 * scale : mode === "notification" ? 24 * scale : (attached ? 14 : COMPACT_H / 2) * scale;
+  // Овальная форма: в свёрнутом виде — полная «пилюля», раскрытый остров — крупные скругления.
+  const radius = mode === "expanded" ? 30 * scale : mode === "notification" ? 28 * scale : (size.h / 2);
   const topRadius = attached ? 0 : radius;
 
-  useWindowFit(size.w, size.h, ms);
+  useFixedFrame(scale);
+  useHitbox(size.w, size.h, ms);
+
+  // Свой звук острова при новом уведомлении (системный приглушён режимом «Не беспокоить»).
+  const notifId = notification?.id;
+  useEffect(() => {
+    if (notifId && settings.notifications.sound && !settings.notifications.dnd) chime();
+  }, [notifId, settings.notifications.sound, settings.notifications.dnd]);
 
   useEffect(() => {
     const active = mode === "expanded" && activeCard ? [activeCard] : [];
@@ -97,7 +147,7 @@ export function Island() {
   }, [mode, activeCard]);
 
   useEffect(() => {
-    if (mode === "expanded" && (!activeCard || !panels.some((c) => c.id === activeCard))) {
+    if (mode === "expanded" && activeCard !== "lyrics" && (!activeCard || !panels.some((c) => c.id === activeCard))) {
       const preferred = top?.kind === "music" ? "music" : top?.id.startsWith("timer:") ? "timers" : panels[0]?.id;
       if (preferred && panels.some((p) => p.id === preferred)) useIsland.getState().setCard(preferred);
       else if (panels[0]) useIsland.getState().setCard(panels[0].id);
@@ -200,7 +250,7 @@ export function Island() {
   return (
     <div className="island-root" style={{ paddingLeft: SIDE, paddingRight: SIDE }}>
       <motion.div
-        className={`island mode-${mode} ${attached ? "attached" : "floating"}`}
+        className={`island mode-${mode} ${attached ? "attached" : "floating"} tone-${settings.appearance.islandTone ?? "graphite"}`}
         initial={false}
         animate={{
           width: size.w,
