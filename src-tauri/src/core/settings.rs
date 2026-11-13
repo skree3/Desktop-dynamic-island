@@ -50,6 +50,18 @@ pub struct AppearanceSettings {
     pub island_tone: String,
     /// Приветствие («Доброе утро», «Добрый вечер»…) при включении и пробуждении.
     pub greeting: bool,
+    /// Непрозрачность окна настроек (0.4–1).
+    pub settings_opacity: f32,
+    /// Эффект под прозрачным окном настроек: none | mica | acrylic.
+    pub settings_effect: String,
+    /// Свои обои окна настроек (файл в папке программы) и их затемнение/размытие.
+    pub wallpaper: Option<String>,
+    pub wallpaper_dim: f32,
+    pub wallpaper_blur: u32,
+    /// Язык интерфейса: ru | en.
+    pub language: String,
+    /// Полноэкранное видео/программа — остров сжимается в тонкую полоску.
+    pub fullscreen_strip: bool,
 }
 impl Default for AppearanceSettings {
     fn default() -> Self {
@@ -64,6 +76,13 @@ impl Default for AppearanceSettings {
             scale: 1.0,
             island_tone: "graphite".into(),
             greeting: true,
+            settings_opacity: 1.0,
+            settings_effect: "none".into(),
+            wallpaper: None,
+            wallpaper_dim: 0.45,
+            wallpaper_blur: 12,
+            language: "ru".into(),
+            fullscreen_strip: true,
         }
     }
 }
@@ -207,6 +226,8 @@ pub struct NotificationSettings {
     pub sound: bool,
     /// Несколько уведомлений одного приложения показываются одной группой.
     pub group_by_app: bool,
+    /// Windows: приложения (AUMID), которые пропускаются через «Не беспокоить» острова.
+    pub dnd_allow: Vec<String>,
 }
 impl Default for NotificationSettings {
     fn default() -> Self {
@@ -222,7 +243,53 @@ impl Default for NotificationSettings {
             island_only: true,
             sound: true,
             group_by_app: true,
+            dnd_allow: vec!["Telegram.TelegramDesktop".into()],
         }
+    }
+}
+
+/// Календарь по ICS-ссылкам.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default, rename_all = "camelCase")]
+pub struct CalendarSettings {
+    pub urls: Vec<String>,
+    /// За сколько минут напоминать о событии.
+    pub remind_minutes: u32,
+}
+impl Default for CalendarSettings {
+    fn default() -> Self {
+        Self { urls: vec![], remind_minutes: 10 }
+    }
+}
+
+/// Голос → текст.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default, rename_all = "camelCase")]
+pub struct SpeechSettings {
+    /// ru | en
+    pub lang: String,
+    /// Сразу превращать голосовые заметки в текст.
+    pub auto: bool,
+}
+impl Default for SpeechSettings {
+    fn default() -> Self {
+        Self { lang: "ru".into(), auto: true }
+    }
+}
+
+/// Помодоро.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default, rename_all = "camelCase")]
+pub struct PomodoroSettings {
+    pub focus_min: u32,
+    pub short_min: u32,
+    pub long_min: u32,
+    pub cycles: u32,
+    pub dnd_during_focus: bool,
+}
+impl Default for PomodoroSettings {
+    fn default() -> Self {
+        Self { focus_min: 25, short_min: 5, long_min: 15, cycles: 4, dnd_during_focus: true }
     }
 }
 
@@ -422,6 +489,9 @@ pub struct Settings {
     pub profiles: ProfilesSettings,
     pub apps: AppsSettings,
     pub phone: PhoneSettings,
+    pub calendar: CalendarSettings,
+    pub pomodoro: PomodoroSettings,
+    pub speech: SpeechSettings,
 }
 
 pub const SECTIONS: &[&str] = &[
@@ -440,6 +510,9 @@ pub const SECTIONS: &[&str] = &[
     "profiles",
     "apps",
     "phone",
+    "calendar",
+    "pomodoro",
+    "speech",
 ];
 
 /// Разделы, которые сохраняются в профиль.
@@ -484,12 +557,35 @@ impl Settings {
         a.radius = a.radius.clamp(6, 40);
         a.animation_speed = if a.animation_speed.is_finite() { a.animation_speed.clamp(0.25, 3.0) } else { 1.0 };
         a.scale = if a.scale.is_finite() { a.scale.clamp(0.75, 1.5) } else { 1.0 };
+        a.settings_opacity = if a.settings_opacity.is_finite() { a.settings_opacity.clamp(0.4, 1.0) } else { 1.0 };
+        if !matches!(a.settings_effect.as_str(), "none" | "mica" | "acrylic") {
+            a.settings_effect = "none".into();
+        }
+        if a.wallpaper.as_deref().is_some_and(|w| !w.starts_with("wallpaper.") || w.contains('/') || w.contains('\\')) {
+            a.wallpaper = None;
+        }
+        a.wallpaper_dim = if a.wallpaper_dim.is_finite() { a.wallpaper_dim.clamp(0.0, 0.9) } else { 0.45 };
+        a.wallpaper_blur = a.wallpaper_blur.min(40);
+        if !matches!(a.language.as_str(), "ru" | "en") {
+            a.language = "ru".into();
+        }
         if !matches!(a.island_tone.as_str(), "graphite" | "grey" | "black") {
             a.island_tone = "graphite".into();
         }
         if !matches!(self.position.style.as_str(), "edge" | "float") {
             self.position.style = "float".into();
         }
+        if !matches!(self.speech.lang.as_str(), "ru" | "en") {
+            self.speech.lang = "ru".into();
+        }
+        clamp_list(&mut self.calendar.urls, 10, 2048);
+        self.calendar.urls.retain(|u| u.starts_with("https://") || u.starts_with("webcal://"));
+        self.calendar.remind_minutes = self.calendar.remind_minutes.clamp(0, 120);
+        let p = &mut self.pomodoro;
+        p.focus_min = p.focus_min.clamp(1, 180);
+        p.short_min = p.short_min.clamp(1, 60);
+        p.long_min = p.long_min.clamp(1, 120);
+        p.cycles = p.cycles.clamp(1, 12);
         self.phone.device_name = self.phone.device_name.trim().chars().filter(|c| !c.is_control()).take(48).collect();
 
         for p in self.position.placements.values_mut() {
@@ -514,6 +610,7 @@ impl Settings {
         n.history_limit = n.history_limit.clamp(0, 500);
         n.app_rules.retain(|r| !r.app.trim().is_empty());
         n.app_rules.truncate(200);
+        clamp_list(&mut n.dnd_allow, 50, 256);
         for r in n.app_rules.iter_mut() {
             r.app = r.app.trim().chars().take(128).collect();
             if let Some(p) = &r.priority {

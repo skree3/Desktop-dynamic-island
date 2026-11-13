@@ -1,7 +1,7 @@
 // Компактное состояние: самая приоритетная активность (таймер, музыка, плагин) или часы.
 
 import { memo, useEffect } from "react";
-import { ArrowDownToLine, Battery, BatteryCharging, BellOff, Cpu, ExternalLink, Hourglass, Mic, MicOff, Music2, Phone, Puzzle, Rocket, Timer as TimerIcon } from "lucide-react";
+import { ArrowDownToLine, Battery, CalendarClock, Target, BatteryCharging, BellOff, Cpu, ExternalLink, Hourglass, Mic, MicOff, Music2, Phone, Puzzle, Rocket, Timer as TimerIcon } from "lucide-react";
 import { useNow } from "../hooks/common";
 import { currentLine, useLyrics } from "../hooks/useLyrics";
 import { ipc } from "../services/ipc";
@@ -21,6 +21,23 @@ function Bars({ playing }: { playing: boolean }) {
       <i />
       <i />
     </span>
+  );
+}
+
+/** Помодоро: фаза и обратный отсчёт до её конца. */
+function PomodoroCompact({ activity }: { activity: Activity }) {
+  const now = useNow(1000);
+  const left = Math.max(0, (activity.startedAt ?? now) - now);
+  const paused = activity.subtitle === "пауза";
+  return (
+    <div className="compact-row">
+      <span className={`compact-icon ${activity.title.startsWith("Фокус") ? "accent" : ""}`}><Target size={15} /></span>
+      <div className="compact-text">
+        <span>{activity.title}</span>
+        {paused && <small>пауза</small>}
+      </div>
+      <span className="compact-value mono">{paused ? "‖" : formatClock(left)}</span>
+    </div>
   );
 }
 
@@ -249,6 +266,17 @@ export function CompactView({ top }: { top: Activity | null }) {
   else if (top?.id === "battery") content = <BatteryPulse activity={top} />;
   else if (top?.id.startsWith("timer:")) content = <TimerCompact activity={top} />;
   else if (top?.kind === "music" && musicInCompact) content = <MusicCompact />;
+  else if (top?.id === "pomodoro") content = <PomodoroCompact activity={top} />;
+  else if (top?.id === "calendar")
+    content = (
+      <div className="compact-row">
+        <span className="compact-icon accent"><CalendarClock size={15} /></span>
+        <div className="compact-text">
+          <span>{top.title}</span>
+          {top.subtitle && <small>{top.subtitle}</small>}
+        </div>
+      </div>
+    );
   else if (top?.kind === "plugin")
     content = (
       <div className="compact-row">

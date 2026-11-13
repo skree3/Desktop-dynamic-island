@@ -1,13 +1,63 @@
 import { useEffect, useState } from "react";
-import { Hourglass, Pause, Play, Plus, RotateCcw, Timer as TimerIcon, Trash2 } from "lucide-react";
+import { Hourglass, Pause, Play, Plus, RotateCcw, SkipForward, Square, Timer as TimerIcon, Trash2 } from "lucide-react";
 import { IconButton, Note, Segmented } from "../components/ui";
-import { useAction, useNow } from "../hooks/common";
+import { useAction, useEvent, useNow } from "../hooks/common";
 import { ipc } from "../services/ipc";
 import { timerElapsed, timerRemaining, useTimers } from "../stores/timers";
-import type { Timer } from "../types";
+import type { PomodoroState, Timer } from "../types";
 import { formatClock, formatStopwatch, parseDuration } from "../utils/format";
 
 const PRESETS = [1, 5, 10, 25];
+
+function Pomodoro() {
+  const [s, setS] = useState<PomodoroState | null>(null);
+  const now = useNow(1000);
+  useEffect(() => {
+    ipc.pomodoroStatus().then(setS).catch(() => {});
+  }, []);
+  useEvent<PomodoroState>("pomodoro://state", setS);
+  if (!s) return null;
+  const running = s.phase !== "idle";
+  const left = s.pausedLeftMs ?? Math.max(0, s.endsAt - now);
+  const max = Math.max(1, ...s.week);
+  const phase = s.phase === "focus" ? `Фокус ${s.cycle} из ${s.cycles}` : s.phase === "short" ? "Короткий перерыв" : s.phase === "long" ? "Длинный перерыв" : "Помодоро";
+  return (
+    <div className="pomo">
+      <div className="pomo-top">
+        <div className="grow">
+          <div className="pomo-time">{running ? formatClock(left) : "25:00"}</div>
+          <div className="pomo-phase">{phase} · сегодня {s.today}</div>
+        </div>
+        {running && s.pausedLeftMs == null ? (
+          <IconButton title="Пауза" onClick={() => ipc.pomodoro("pause").catch(() => {})}>
+            <Pause size={16} />
+          </IconButton>
+        ) : (
+          <IconButton title="Старт" onClick={() => ipc.pomodoro("start").catch(() => {})}>
+            <Play size={16} />
+          </IconButton>
+        )}
+        {running && (
+          <IconButton title="Следующая фаза" onClick={() => ipc.pomodoro("skip").catch(() => {})}>
+            <SkipForward size={16} />
+          </IconButton>
+        )}
+        {running && (
+          <IconButton title="Остановить" onClick={() => ipc.pomodoro("stop").catch(() => {})}>
+            <Square size={14} />
+          </IconButton>
+        )}
+      </div>
+      {s.week.length > 0 && (
+        <div className="pomo-week" title="Фокусов за неделю">
+          {s.week.map((c, i) => (
+            <i key={i} className={i === s.week.length - 1 ? "today" : ""} style={{ height: `${Math.max(12, (c / max) * 100)}%` }} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function TimersCard() {
   const timers = useTimers((s) => s.timers);
@@ -33,6 +83,7 @@ export default function TimersCard() {
   const d = new Date(now);
   return (
     <div className="card-pad">
+      <Pomodoro />
       <div className="clock-big">
         <span className="mono">{d.toLocaleTimeString("ru-RU")}</span>
         <small>{d.toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</small>

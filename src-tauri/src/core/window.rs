@@ -590,11 +590,30 @@ pub fn open_settings(app: &AppHandle, section: Option<&str>) {
         .center()
         .resizable(true)
         .decorations(true)
+        // Прозрачность и эффекты (Mica/Acrylic) окна настроек — по настройкам «Внешний вид».
+        .transparent(true)
         .visible(true);
     #[cfg(windows)]
     let builder = builder.additional_browser_args(browser_args());
-    let res = builder.build();
-    if let Err(e) = res {
-        tracing::error!(error = %e, "не удалось открыть окно настроек");
+    match builder.build() {
+        Ok(w) => apply_settings_effect(&w, &crate::core::state::shared(app)),
+        Err(e) => tracing::error!(error = %e, "не удалось открыть окно настроек"),
     }
+}
+
+/// Эффект под окном настроек (Windows 11; в Linux прозрачность даёт композитор).
+pub fn apply_settings_effect(w: &WebviewWindow, st: &AppState) {
+    #[cfg(windows)]
+    {
+        use tauri::window::{Effect, EffectsBuilder};
+        let (effect, opacity) = st.with_settings(|s| (s.appearance.settings_effect.clone(), s.appearance.settings_opacity));
+        let effects = match effect.as_str() {
+            "mica" if opacity < 1.0 => Some(EffectsBuilder::new().effect(Effect::Mica).build()),
+            "acrylic" if opacity < 1.0 => Some(EffectsBuilder::new().effect(Effect::Acrylic).build()),
+            _ => None,
+        };
+        let _ = w.set_effects(effects);
+    }
+    #[cfg(not(windows))]
+    let _ = (w, st);
 }

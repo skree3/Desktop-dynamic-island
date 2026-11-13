@@ -1,7 +1,7 @@
 // Полка: перетащите файлы на остров — они появятся здесь. Хранятся только ссылки.
 
 import { useRef, useState } from "react";
-import { Copy, ExternalLink, File, Folder, FolderOpen, Inbox, Scissors, Trash2, X } from "lucide-react";
+import { Copy, ExternalLink, File, Folder, FolderOpen, Inbox, Languages, ScanText, Scissors, Smartphone, Trash2, X } from "lucide-react";
 import { IconButton, Note } from "../components/ui";
 import { useEvent, useLoad } from "../hooks/common";
 import { errorMessage, ipc } from "../services/ipc";
@@ -13,6 +13,23 @@ export default function ShelfCard() {
   const dragging = useIsland((s) => s.dragging);
   const [error, setError] = useState<string | null>(null);
   useEvent("shelf://changed", () => items.reload());
+  // Кнопка «На телефон» — только если есть сопряжённый телефон в сети.
+  const phone = useLoad(() => ipc.phoneStatus().catch(() => null));
+  useEvent<import("../types").PhoneStatus>("phone://status", (st) => phone.setData(st));
+  const phoneReady = !!phone.data?.devices.some((d) => d.paired && d.reachable);
+  // Текст с картинки (OCR) и его перевод.
+  const [ocr, setOcr] = useState<{ text: string; busy: boolean; translated?: string } | null>(null);
+  const isImage = (name: string) => /\.(png|jpe?g|bmp|webp|gif)$/i.test(name);
+  const recognize = (id: number) => {
+    setOcr({ text: "", busy: true });
+    ipc
+      .ocrShelfItem(id)
+      .then((text) => setOcr({ text: text || "Текст не найден", busy: false }))
+      .catch((e) => {
+        setOcr(null);
+        setError(errorMessage(e));
+      });
+  };
 
   const run = (fn: () => Promise<unknown>) => {
     setError(null);
@@ -94,6 +111,16 @@ export default function ShelfCard() {
                     <IconButton size="sm" title="Показать в папке" onClick={() => run(() => ipc.shelfCommand("reveal", it.id))}>
                       <FolderOpen size={13} />
                     </IconButton>
+                    {isImage(it.name) && it.exists && (
+                      <IconButton size="sm" title="Текст с картинки" onClick={() => recognize(it.id)}>
+                        <ScanText size={13} />
+                      </IconButton>
+                    )}
+                    {phoneReady && !it.isDir && (
+                      <IconButton size="sm" title="Отправить на телефон" onClick={() => run(() => ipc.phoneSendFile(it.path))}>
+                        <Smartphone size={13} />
+                      </IconButton>
+                    )}
                     <IconButton size="sm" title="Скопировать" onClick={() => run(() => ipc.shelfCommand("copy", it.id))}>
                       <Copy size={13} />
                     </IconButton>
@@ -106,6 +133,40 @@ export default function ShelfCard() {
             ))}
           </div>
         </>
+      )}
+      {ocr && (
+        <div className="ocr-panel">
+          {ocr.busy ? (
+            <div className="small muted">Распознаю текст…</div>
+          ) : (
+            <>
+              <div className="ocr-text scroll">{ocr.translated ?? ocr.text}</div>
+              <div className="row gap">
+                <button type="button" className="chip" onClick={() => navigator.clipboard.writeText(ocr.translated ?? ocr.text).catch(() => {})}>
+                  <Copy size={12} /> Копировать
+                </button>
+                {!ocr.translated && (
+                  <button
+                    type="button"
+                    className="chip"
+                    onClick={() =>
+                      ipc
+                        .translate(ocr.text)
+                        .then(([t]) => setOcr({ ...ocr, translated: t }))
+                        .catch((e) => setError(errorMessage(e)))
+                    }
+                  >
+                    <Languages size={12} /> Перевести
+                  </button>
+                )}
+                <span className="grow" />
+                <button type="button" className="chip" onClick={() => setOcr(null)}>
+                  <X size={12} />
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       )}
       {error && <Note kind="error">{error}</Note>}
     </div>

@@ -5,6 +5,7 @@ import { Bell, Mic, Pin, PinOff, Play, Plus, Square, Trash2, X } from "lucide-re
 import { IconButton, Note as Hint } from "../components/ui";
 import { useEvent, useLoad, useNow } from "../hooks/common";
 import { errorMessage, ipc } from "../services/ipc";
+import { useApp } from "../stores/app";
 import type { Note } from "../types";
 import { formatRelative } from "../utils/format";
 import { parseReminder, reminderLabel } from "../utils/reminder";
@@ -104,6 +105,7 @@ export default function NotesCard() {
   useEvent("notes://changed", () => notes.reload());
 
   const [recording, setRecording] = useState<{ since: number } | null>(null);
+  const [transcribing, setTranscribing] = useState(false);
   const [levels, setLevels] = useState<number[]>([]);
   useEvent<number>("voice://level", (l) => setLevels((v) => [...v.slice(-23), l]));
   const parsed = parseReminder(draft);
@@ -130,8 +132,20 @@ export default function NotesCard() {
       }
       setRecording(null);
       const rec = await ipc.voiceStop();
-      const r = parseReminder(draft);
-      await ipc.noteCreate(r?.text || draft, undefined, { remindAt: r?.at ?? null, audio: rec.name, audioMs: rec.durationMs });
+      let spoken = "";
+      const speech = useApp.getState().settings?.speech;
+      if (speech?.auto) {
+        const st = await ipc.speechStatus().catch(() => null);
+        if (st?.models.includes(speech.lang)) {
+          setTranscribing(true);
+          spoken = await ipc.voiceTranscribe(rec.name).catch(() => "");
+          setTranscribing(false);
+        }
+      }
+      // Сказанное тоже можно превратить в напоминание: «позвонить маме в шесть вечера».
+      const r = parseReminder(draft || spoken);
+      const text = r?.text || draft || spoken;
+      await ipc.noteCreate(text, undefined, { remindAt: r?.at ?? null, audio: rec.name, audioMs: rec.durationMs });
       setDraft("");
     } catch (e) {
       setRecording(null);
@@ -189,6 +203,7 @@ export default function NotesCard() {
           <span className="small muted mono">{Math.floor((now - recording.since) / 1000) >= 0 ? "идёт запись" : ""}</span>
         </div>
       )}
+      {transcribing && <div className="note-hint small">Превращаю голос в текст…</div>}
       {!recording && parsed && (
         <div className="note-hint small">
           <Bell size={12} />

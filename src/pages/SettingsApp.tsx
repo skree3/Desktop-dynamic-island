@@ -7,7 +7,7 @@ import { Bell, ChevronRight, Cpu, Plug, Shield, type LucideIcon } from "lucide-r
 import { Spinner } from "../components/ui";
 import { useEvent } from "../hooks/common";
 import { useTheme } from "../hooks/useTheme";
-import { events } from "../services/ipc";
+import { events, ipc } from "../services/ipc";
 import { useApp } from "../stores/app";
 import "../styles/settings.css";
 
@@ -22,6 +22,8 @@ const plugins = () => import("../settings/sections/plugins");
 const personal = () => import("../settings/sections/personal");
 const system = () => import("../settings/sections/system");
 const phone = () => import("../settings/sections/phone");
+const calendar = () => import("../settings/sections/calendar");
+const speech = () => import("../settings/sections/speech");
 
 /** Значок группы «Остров» — сама пилюля. */
 function IslandIcon({ size = 18 }: { size?: number }) {
@@ -45,6 +47,7 @@ export const GROUPS: GroupDef[] = [
       { id: "position", title: "Положение", component: S(general, "PositionSection") },
       { id: "cards", title: "Карточки", component: S(modules, "CardsSection") },
       { id: "themes", title: "Темы", component: S(personal, "ThemesSection") },
+      { id: "pomodoro", title: "Помодоро", component: S(calendar, "PomodoroSection") },
     ],
   },
   {
@@ -63,6 +66,7 @@ export const GROUPS: GroupDef[] = [
     icon: Plug,
     sections: [
       { id: "phone", title: "Телефон", component: S(phone, "PhoneSection") },
+      { id: "calendar", title: "Календарь", component: S(calendar, "CalendarSection") },
       { id: "integrations", title: "Интеграции", component: S(integrations, "IntegrationsSection") },
       { id: "plugins", title: "Плагины", component: S(plugins, "PluginsSection") },
       { id: "hotkeys", title: "Горячие клавиши", component: S(personal, "HotkeysSection") },
@@ -76,6 +80,7 @@ export const GROUPS: GroupDef[] = [
       { id: "system-monitor", title: "Системный монитор", component: S(modules, "SystemMonitorSection") },
       { id: "game-mode", title: "Игровой режим", component: S(system, "GameModeSection") },
       { id: "performance", title: "Производительность", component: S(system, "PerformanceSection") },
+      { id: "speech", title: "Распознавание речи", component: S(speech, "SpeechSection") },
       { id: "monitors", title: "Мониторы", component: S(system, "MonitorsSection") },
       { id: "profiles", title: "Профили", component: S(personal, "ProfilesSection") },
     ],
@@ -107,6 +112,14 @@ export default function SettingsApp({ initialSection }: { initialSection: string
   useEffect(() => {
     useApp.getState().init().catch(console.error);
   }, []);
+  const wallpaper = useApp((s) => s.settings?.appearance.wallpaper ?? null);
+  const [wallUrl, setWallUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!wallpaper) return setWallUrl(null);
+    ipc.wallpaperData().then(setWallUrl).catch(() => setWallUrl(null));
+  }, [wallpaper]);
+  // Тема могла быть создана в этом же окне — подтягиваем список.
+  useEvent(events.THEME_CHANGED, () => ipc.themes().then((themes) => useApp.setState({ themes })).catch(() => {}));
   useEvent<string>(events.SETTINGS_NAVIGATE, (s) => {
     if (ALL.some((x) => x.id === s)) {
       setSection(s);
@@ -118,7 +131,8 @@ export default function SettingsApp({ initialSection }: { initialSection: string
   const current = ALL.find((s) => s.id === section)!;
   const Comp = current.component;
   return (
-    <div className="settings">
+    <div className={`settings ${wallUrl ? "has-wall" : ""}`}>
+      {wallUrl && <div className="settings-wall" style={{ backgroundImage: `url(${wallUrl})` }} aria-hidden />}
       <nav className="isles scroll" aria-label="Разделы настроек">
         {GROUPS.map((g) => {
           const isOpen = open === g.id;

@@ -12,6 +12,7 @@ A lightweight interactive system bar for Windows and Linux in the style of Apple
 | Windows 10 и 11 | [Setup.exe](https://github.com/skree3/Desktop-dynamic-island/releases/latest/download/DesktopIsland-windows-setup.exe) · [MSI](https://github.com/skree3/Desktop-dynamic-island/releases/latest/download/DesktopIsland-windows.msi) | [ZIP](https://github.com/skree3/Desktop-dynamic-island/releases/latest/download/DesktopIsland-windows-portable.zip) |
 | Ubuntu, Debian, Mint | [DEB](https://github.com/skree3/Desktop-dynamic-island/releases/latest/download/DesktopIsland-linux-x64.deb) | [AppImage](https://github.com/skree3/Desktop-dynamic-island/releases/latest/download/DesktopIsland-linux-x64.AppImage) |
 | Fedora, openSUSE | [RPM](https://github.com/skree3/Desktop-dynamic-island/releases/latest/download/DesktopIsland-linux-x64.rpm) | [AppImage](https://github.com/skree3/Desktop-dynamic-island/releases/latest/download/DesktopIsland-linux-x64.AppImage) |
+| Любой Linux | [Flatpak](https://github.com/skree3/Desktop-dynamic-island/releases/latest/download/DesktopIsland-linux-x64.flatpak) (без чтения чужих уведомлений — так устроена песочница) | |
 
 Все версии лежат на странице [Releases](https://github.com/skree3/Desktop-dynamic-island/releases). Дальше приложение обновляется само: когда выходит новая версия, в острове появится уведомление с кнопкой «Обновить». В версиях .deb и .rpm эта кнопка открывает страницу загрузки, потому что для установки нужны права администратора.
 
@@ -24,6 +25,17 @@ A lightweight interactive system bar for Windows and Linux in the style of Apple
 - **Приветствие** «Доброе утро», «Добрый день», «Добрый вечер» при включении компьютера, пробуждении и разблокировке.
 - **Новое окно настроек:** разделы собраны в пять групп-«островов».
 - **Остров серый и овальный**, на выбор «у края экрана» или «плавающий» (Настройки → Остров → Положение), цвет — графит, серый или чёрный.
+- **Ответ на сообщение с телефона прямо из острова** и передача файлов: прислали файл с телефона — он лежит на полке и в «Загрузках»; кнопка «На телефон» у файлов на полке.
+- **Календарь** по секретной ICS-ссылке (Google, Outlook, Яндекс): «Созвон · через 12 мин» в острове и напоминание заранее.
+- **Помодоро** с циклами, статистикой за неделю и «Не беспокоить» на время фокуса (карточка «Таймеры»).
+- **Тонкая полоска** вместо острова во время полноэкранного видео — наведите, чтобы вернуть.
+- **Текст с картинки** (распознавание без интернета) и перевод по кнопке — у снимков на полке.
+- **Голос в текст** прямо на компьютере (Vosk, модель ~45 МБ скачивается один раз): голосовая заметка сразу становится текстом, «в шесть вечера» — напоминанием.
+- **Звук:** смена устройства вывода в один клик, громкость каждой программы, Bluetooth-наушники с зарядом и подключением.
+- **Свой стиль** из 1–3 цветов, окно настроек меняет цвета вместе с темой, свои обои, прозрачность и эффекты Mica/Акрил.
+- **English** — язык интерфейса переключается в «Общих».
+- **Flatpak** для Linux (в песочнице не читаются уведомления других программ).
+- **«Не беспокоить» без потерь:** приложения из списка исключений (по умолчанию Telegram) Windows пропускает, и их сообщения доходят до острова с текстом.
 - **Исправлено:** остров больше не дёргается при раскрытии и появлении уведомлений; системные баннеры и звук Windows больше не показываются вместе с островом; остров появляется сразу после включения компьютера.
 
 ## Что умеет

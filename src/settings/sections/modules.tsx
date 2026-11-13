@@ -102,6 +102,12 @@ export function NotificationsSection() {
   const [app, setApp] = useState("");
   const set = (p: Partial<typeof n>) => run(() => update("notifications", p));
   const setRule = (rule: AppRule) => set({ appRules: n.appRules.map((r) => (r.app === rule.app ? rule : r)) });
+  const isWindows = navigator.userAgent.includes("Windows");
+  // Недавние приложения из истории — для быстрого добавления в исключения «Не беспокоить».
+  const history = useLoad(() => ipc.notificationsHistory());
+  const recentApps = Object.values(
+    Object.fromEntries((history.data ?? []).filter((h) => h.kind === "system" && h.openTarget).map((h) => [h.openTarget!, { id: h.openTarget!, name: h.appName }])),
+  );
 
   return (
     <Page title="Уведомления" description="Event Manager показывает уведомления по одному, по приоритету, без наложения на другие карточки.">
@@ -118,6 +124,27 @@ export function NotificationsSection() {
         >
           <Toggle checked={n.islandOnly} disabled={!n.listenSystem} onChange={(v) => set({ islandOnly: v })} />
         </Field>
+        {isWindows && (
+          <Field
+            wide
+            label="Пропускать через «Не беспокоить»"
+            description="Приложения, которые сами молчат в режиме «Не беспокоить» (например, Telegram). Их уведомления дойдут до острова, но Windows может на мгновение показать и свой баннер"
+          >
+            <ListEditor items={n.dndAllow ?? []} onChange={(v) => set({ dndAllow: v })} placeholder="Идентификатор приложения (AUMID), например Telegram.TelegramDesktop" />
+            {recentApps.length > 0 && (
+              <div className="tags">
+                {recentApps
+                  .filter((a) => !(n.dndAllow ?? []).includes(a.id))
+                  .slice(0, 8)
+                  .map((a) => (
+                    <button key={a.id} type="button" className="tag" onClick={() => set({ dndAllow: [...(n.dndAllow ?? []), a.id] })}>
+                      + {a.name}
+                    </button>
+                  ))}
+              </div>
+            )}
+          </Field>
+        )}
         <Field label="Звук уведомлений" description="Короткий тихий сигнал острова">
           <Toggle checked={n.sound ?? true} onChange={(v) => set({ sound: v })} />
         </Field>

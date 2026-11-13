@@ -44,6 +44,8 @@ const OUTGOING: &[&str] = &[
     "kdeconnect.clipboard",
     "kdeconnect.clipboard.connect",
     "kdeconnect.findmyphone.request",
+    "kdeconnect.notification.reply",
+    "kdeconnect.share.request",
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -67,6 +69,8 @@ struct Device {
     /// Открытое соединение: (номер поколения, отправитель строк).
     link: Option<(u64, mpsc::UnboundedSender<String>)>,
     fingerprint: Option<String>,
+    /// Адрес телефона в сети (для передачи файлов).
+    addr: Option<std::net::IpAddr>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -87,6 +91,8 @@ struct Inner {
     my_id: String,
     /// Недавние попытки подключения по UDP-объявлению (чтобы не долбить телефон).
     attempts: HashMap<String, i64>,
+    /// Уведомления телефона, на которые можно ответить: источник → requestReplyId.
+    replies: HashMap<String, (String, String)>,
 }
 
 #[derive(Default)]
@@ -393,6 +399,18 @@ impl PhoneModule {
         if let Some(id) = source.strip_prefix("phone-pair:") {
             return self.accept(st, id, action == "accept");
         }
+        if let Some(text) = action.strip_prefix("reply:") {
+            let target = self.lock().replies.get(source).cloned();
+            let Some((dev, reply_id)) = target else { return Err(AppError::invalid("на это сообщение уже нельзя ответить")) };
+            let text: String = text.trim().chars().take(2000).collect();
+            if text.is_empty() {
+                return Err(AppError::invalid("пустой ответ"));
+            }
+            if !self.send(&dev, packet("kdeconnect.notification.reply", json!({ "requestReplyId": reply_id, "message": text }))) {
+                return Err(AppError::invalid("телефон сейчас не в сети"));
+            }
+            return Ok(());
+        }
         if let Some(id) = source.strip_prefix("phone-call:") {
             if action == "mute" {
                 self.send(id, packet("kdeconnect.telephony.request_mute", json!({})));
@@ -489,7 +507,7 @@ async fn incoming(st: Shared, cfg: Arc<rustls::ClientConfig>, mut stream: tokio:
     match tokio::time::timeout(Duration::from_secs(15), connector.connect(server_name, stream)).await {
         Ok(Ok(tls)) => {
             let cert = tls.get_ref().1.peer_certificates().and_then(|c| c.first()).map(|c| c.to_vec());
-            run_link(st, (id, name, kind), tls, cert).await;
+            run_link(st, (id, name, kind), tls, cert, addr.ip()).await;
         }
         Ok(Err(e)) => st.log.warn(category::INTEGRATION, "phone", format!("TLS с «{name}» не установлен: {e}")),
         Err(_) => {}
@@ -507,7 +525,7 @@ async fn outgoing(st: Shared, cfg: Arc<rustls::ServerConfig>, target: SocketAddr
     match tokio::time::timeout(Duration::from_secs(15), acceptor.accept(stream)).await {
         Ok(Ok(tls)) => {
             let cert = tls.get_ref().1.peer_certificates().and_then(|c| c.first()).map(|c| c.to_vec());
-            run_link(st, peer, tls, cert).await;
+            run_link(st, peer, tls, cert, target.ip()).await;
         }
         Ok(Err(e)) => st.log.warn(category::INTEGRATION, "phone", format!("TLS с «{}» не установлен: {e}", peer.1)),
         Err(_) => {}
@@ -515,7 +533,7 @@ async fn outgoing(st: Shared, cfg: Arc<rustls::ServerConfig>, target: SocketAddr
 }
 
 /// Установленное соединение с телефоном: чтение пакетов и отправка из очереди.
-async fn run_link<S>(st: Shared, peer: (String, String, String), stream: S, cert: Option<Vec<u8>>)
+async fn run_link<S>(st: Shared, peer: (String, String, String), stream: S, cert: Option<Vec<u8>>, addr: std::net::IpAddr)
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
 {
@@ -536,6 +554,7 @@ where
         d.kind = kind;
         d.fingerprint = Some(fp);
         d.link = Some((gen, tx.clone()));
+        d.addr = Some(addr);
         let paired = d.paired;
         g.message = String::new();
         (gen, paired)
@@ -691,7 +710,19 @@ fn handle_packet(st: &Shared, id: &str, v: &Value) {
                 return;
             }
             let app = if app.is_empty() { name.clone() } else { app };
-            st.events.push(phone_notification(format!("phone:{id}:{nid}"), &app, title, body_text, Priority::Normal, vec![]));
+            let source = format!("phone:{id}:{nid}");
+            let reply = text("requestReplyId");
+            let actions = if reply.is_empty() {
+                vec![]
+            } else {
+                let mut g = st.phone.lock();
+                if g.replies.len() > 200 {
+                    g.replies.clear();
+                }
+                g.replies.insert(source.clone(), (id.to_string(), reply));
+                vec![act("reply", "Ответить")]
+            };
+            st.events.push(phone_notification(source, &app, title, body_text, Priority::Normal, actions));
         }
         "kdeconnect.telephony" => {
             if !s.calls {
@@ -762,10 +793,135 @@ fn handle_packet(st: &Shared, id: &str, v: &Value) {
                     }
                 });
                 st.events.push(phone_notification(format!("phone:{id}:share"), &name, "Текст с телефона скопирован".into(), shared, Priority::Normal, vec![]));
-            } else if body.get("filename").is_some() {
-                st.events.push(phone_notification(format!("phone:{id}:share"), &name, "Файл не принят".into(), "Передача файлов с телефона пока не поддерживается".into(), Priority::Normal, vec![]));
+            } else if let Some(file) = body.get("filename").and_then(|f| f.as_str()) {
+                let size = v.get("payloadSize").and_then(|s| s.as_i64()).unwrap_or(-1);
+                let port = v.get("payloadTransferInfo").and_then(|p| p.get("port")).and_then(|p| p.as_u64()).and_then(|p| u16::try_from(p).ok());
+                let addr = st.phone.lock().devices.get(id).and_then(|d| d.addr);
+                match (port, addr) {
+                    (Some(port), Some(ip)) => {
+                        let (st2, file, name2) = (st.clone(), file.to_string(), name.clone());
+                        tauri::async_runtime::spawn(async move { receive_file(st2, SocketAddr::new(ip, port), file, size, name2).await });
+                    }
+                    _ => {
+                        st.events.push(phone_notification(format!("phone:{id}:share"), &name, "Файл не принят".into(), "Телефон не сообщил, откуда забрать файл".into(), Priority::Normal, vec![]));
+                    }
+                }
             }
         }
         _ => {}
+    }
+}
+
+/// Безопасное имя файла с телефона (без путей и запрещённых символов).
+fn safe_file_name(name: &str) -> String {
+    let base = name.rsplit(['/', '\\']).next().unwrap_or("file");
+    let clean: String = base.chars().filter(|c| !c.is_control() && !matches!(c, '<' | '>' | ':' | '"' | '|' | '?' | '*')).take(120).collect();
+    let clean = clean.trim().trim_start_matches('.').to_string();
+    if clean.is_empty() { "файл с телефона".into() } else { clean }
+}
+
+/// Принимает файл с телефона: подключаемся к его порту, TLS как клиент,
+/// сохраняем в «Загрузки» и кладём на полку.
+async fn receive_file(st: Shared, target: SocketAddr, file: String, size: i64, device: String) {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let dir = crate::modules::downloads::downloads_dir().unwrap_or_else(|| st.paths.data.join("phone-files"));
+    let _ = std::fs::create_dir_all(&dir);
+    let name = safe_file_name(&file);
+    let mut path = dir.join(&name);
+    let mut n = 1;
+    while path.exists() {
+        let (stem, ext) = match name.rsplit_once('.') {
+            Some((s, e)) => (s.to_string(), format!(".{e}")),
+            None => (name.clone(), String::new()),
+        };
+        path = dir.join(format!("{stem} ({n}){ext}"));
+        n += 1;
+    }
+    let result: Result<u64, String> = async {
+        let dir = phone_dir(&st);
+        let ident = net::Identity::load_or_create(&dir)?;
+        let cfg = ident.client_config()?;
+        let stream = tokio::time::timeout(Duration::from_secs(10), tokio::net::TcpStream::connect(target)).await.map_err(|_| "телефон не отвечает".to_string())?.map_err(|e| e.to_string())?;
+        let mut tls = tokio_rustls::TlsConnector::from(cfg).connect(rustls::pki_types::ServerName::IpAddress(target.ip().into()), stream).await.map_err(|e| e.to_string())?;
+        let mut out = tokio::fs::File::create(&path).await.map_err(|e| e.to_string())?;
+        let mut buf = vec![0u8; 64 * 1024];
+        let mut total: u64 = 0;
+        loop {
+            let n = tls.read(&mut buf).await.unwrap_or(0);
+            if n == 0 {
+                break;
+            }
+            out.write_all(&buf[..n]).await.map_err(|e| e.to_string())?;
+            total += n as u64;
+            if size >= 0 && total >= size as u64 {
+                break;
+            }
+        }
+        out.flush().await.map_err(|e| e.to_string())?;
+        if size >= 0 && total < size as u64 {
+            return Err("передача прервалась".into());
+        }
+        Ok(total)
+    }
+    .await;
+    match result {
+        Ok(bytes) => {
+            let p = path.to_string_lossy().to_string();
+            let _ = crate::modules::shelf::add(&st, &[p]);
+            let size = crate::modules::downloads::format_size(bytes as f64);
+            st.events.push(phone_notification(format!("phone:file:{}", now_ms()), &device, format!("Файл с телефона: {}", path.file_name().map(|f| f.to_string_lossy()).unwrap_or_default()), format!("{size} · лежит на полке и в «Загрузках»"), Priority::Normal, vec![]));
+        }
+        Err(e) => {
+            let _ = std::fs::remove_file(&path);
+            st.events.push(phone_notification(format!("phone:file:{}", now_ms()), &device, "Файл не получен".into(), e, Priority::Normal, vec![]));
+        }
+    }
+}
+
+impl PhoneModule {
+    /// Отправляет файл на сопряжённый телефон (первый в сети): KDE Connect
+    /// share.request с портом, к которому телефон подключится за содержимым.
+    pub async fn send_file(st: Shared, path: std::path::PathBuf) -> AppResult<()> {
+        use tokio::io::AsyncWriteExt;
+        let meta = std::fs::metadata(&path)?;
+        if !meta.is_file() {
+            return Err(AppError::invalid("отправить можно только файл"));
+        }
+        let target = {
+            let g = st.phone.lock();
+            g.devices.iter().find(|(_, d)| d.paired && d.link.is_some()).map(|(id, d)| (id.clone(), d.name.clone()))
+        };
+        let Some((dev, dev_name)) = target else { return Err(AppError::invalid("нет сопряжённого телефона в сети")) };
+        let ident = net::Identity::load_or_create(&phone_dir(&st)).map_err(AppError::Other)?;
+        let cfg = ident.server_config().map_err(AppError::Other)?;
+        let mut listener = None;
+        for port in 1739u16..=1764 {
+            if let Ok(l) = tokio::net::TcpListener::bind(("0.0.0.0", port)).await {
+                listener = Some((l, port));
+                break;
+            }
+        }
+        let (listener, port) = listener.ok_or_else(|| AppError::Other("нет свободного порта для передачи".into()))?;
+        let file_name = path.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_else(|| "file".into());
+        let line = json!({
+            "id": now_ms(),
+            "type": "kdeconnect.share.request",
+            "body": { "filename": file_name, "open": false },
+            "payloadSize": meta.len(),
+            "payloadTransferInfo": { "port": port },
+        })
+        .to_string();
+        if !st.phone.send(&dev, line) {
+            return Err(AppError::invalid("телефон сейчас не в сети"));
+        }
+        let (stream, _) = tokio::time::timeout(Duration::from_secs(60), listener.accept())
+            .await
+            .map_err(|_| AppError::Other("телефон не забрал файл за минуту".into()))??;
+        let mut tls = tokio_rustls::TlsAcceptor::from(cfg).accept(stream).await.map_err(|e| AppError::Other(e.to_string()))?;
+        let mut file = tokio::fs::File::open(&path).await?;
+        tokio::io::copy(&mut file, &mut tls).await?;
+        tls.shutdown().await.ok();
+        st.events.push(phone_notification(format!("phone:sent:{}", now_ms()), &dev_name, format!("Файл отправлен: {file_name}"), String::new(), Priority::Low, vec![]));
+        Ok(())
     }
 }

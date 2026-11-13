@@ -117,3 +117,57 @@ mod tests {
         assert_eq!(super::parse_percent("Volume: front-left: 32768 /  50% / -18.06 dB"), Some(0.5));
     }
 }
+
+fn pactl(args: &[&str]) -> Option<String> {
+    let out = std::process::Command::new("pactl").args(args).output().ok()?;
+    out.status.success().then(|| String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
+/// Громкость программ: `pactl list sink-inputs`.
+pub fn app_volumes() -> AppResult<Vec<crate::platform::types::AppVolume>> {
+    let text = pactl(&["list", "sink-inputs"]).ok_or_else(|| AppError::unsupported("pactl недоступен"))?;
+    let mut out = Vec::new();
+    let mut cur: Option<crate::platform::types::AppVolume> = None;
+    for line in text.lines() {
+        let l = line.trim();
+        if let Some(n) = l.strip_prefix("Sink Input #") {
+            if let Some(c) = cur.take() {
+                out.push(c);
+            }
+            cur = Some(crate::platform::types::AppVolume { id: n.trim().to_string(), name: String::new(), level: 1.0, muted: false });
+        } else if let Some(c) = cur.as_mut() {
+            if let Some(v) = l.strip_prefix("Mute:") {
+                c.muted = v.trim() == "yes";
+            } else if l.starts_with("Volume:") {
+                if let Some(p) = l.split('/').nth(1).and_then(|p| p.trim().trim_end_matches('%').parse::<f32>().ok()) {
+                    c.level = (p / 100.0).clamp(0.0, 1.5);
+                }
+            } else if let Some(v) = l.strip_prefix("application.name = ") {
+                c.name = v.trim_matches('"').to_string();
+            }
+        }
+    }
+    if let Some(c) = cur.take() {
+        out.push(c);
+    }
+    for a in out.iter_mut() {
+        if a.name.is_empty() {
+            a.name = format!("Поток {}", a.id);
+        }
+    }
+    Ok(out)
+}
+
+pub fn set_app_volume(id: &str, level: Option<f32>, muted: Option<bool>) -> AppResult<()> {
+    if !id.chars().all(|c| c.is_ascii_digit()) {
+        return Err(AppError::invalid("неверный поток"));
+    }
+    if let Some(l) = level {
+        let pct = format!("{}%", (l.clamp(0.0, 1.0) * 100.0).round() as u32);
+        pactl(&["set-sink-input-volume", id, &pct]).ok_or_else(|| AppError::System("не удалось изменить громкость".into()))?;
+    }
+    if let Some(m) = muted {
+        pactl(&["set-sink-input-mute", id, if m { "1" } else { "0" }]).ok_or_else(|| AppError::System("не удалось выключить звук".into()))?;
+    }
+    Ok(())
+}

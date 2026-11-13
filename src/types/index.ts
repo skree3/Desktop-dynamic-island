@@ -36,6 +36,13 @@ export interface Settings {
     scale: number;
     islandTone: "graphite" | "grey" | "black";
     greeting: boolean;
+    settingsOpacity: number;
+    settingsEffect: "none" | "mica" | "acrylic";
+    wallpaper: string | null;
+    wallpaperDim: number;
+    wallpaperBlur: number;
+    language: "ru" | "en";
+    fullscreenStrip: boolean;
   };
   position: { monitor: string | null; placements: Record<string, Placement>; locked: boolean; style: "edge" | "float" };
   modules: Record<ModuleId, boolean>;
@@ -51,9 +58,13 @@ export interface Settings {
     islandOnly: boolean;
     sound: boolean;
     groupByApp: boolean;
+    dndAllow: string[];
   };
   music: { showArtwork: boolean; showInCompact: boolean; preferredSource: string | null; pollIntervalMs: number; lyrics: boolean };
   phone: PhoneSettings;
+  calendar: { urls: string[]; remindMinutes: number };
+  speech: { lang: "ru" | "en"; auto: boolean };
+  pomodoro: { focusMin: number; shortMin: number; longMin: number; cycles: number; dndDuringFocus: boolean };
   systemMonitor: { intervalMs: number; showInCompact: boolean; historyPoints: number };
   clipboard: {
     historyEnabled: boolean;
@@ -597,4 +608,44 @@ export interface PhoneStatus {
   message: string;
   deviceName: string;
   devices: PhoneDevice[];
+}
+
+export interface CalEvent {
+  uid: string;
+  title: string;
+  start: number;
+  end: number;
+  allDay: boolean;
+  location: string;
+}
+
+export interface PomodoroState {
+  phase: "idle" | "focus" | "short" | "long";
+  cycle: number;
+  cycles: number;
+  startedAt: number;
+  endsAt: number;
+  pausedLeftMs: number | null;
+  today: number;
+  week: number[];
+}
+
+export interface AppVolume {
+  id: string;
+  name: string;
+  level: number;
+  muted: boolean;
+}
+
+export interface Headphone {
+  id: string;
+  name: string;
+  connected: boolean;
+  battery: number | null;
+}
+
+export interface SpeechStatus {
+  library: boolean;
+  models: string[];
+  installing: string | null;
 }

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useApp } from "../stores/app";
 import { hexToRgba } from "../utils/format";
+import { setLanguage } from "../i18n";
 
 function systemDark(): boolean {
   return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? true;
@@ -48,8 +49,28 @@ export function useTheme(target: "island" | "settings") {
     const islandBg = target === "island" && mode === "dark" ? tones[appearance.islandTone ?? "graphite"] ?? palette.bg : palette.bg;
     root.style.setProperty("--island-bg", hexToRgba(islandBg ?? "#000000", target === "island" ? appearance.opacity : 1));
     root.style.setProperty("--radius", `${appearance.radius}px`);
+    if (target === "settings") {
+      // Окно настроек следует выбранной теме (раньше было всегда графитово-янтарным).
+      const op = appearance.settingsOpacity ?? 1;
+      const bg = palette.bg ?? (mode === "dark" ? "#111112" : "#f5f5f6");
+      set("--s-bg", hexToRgba(bg, op));
+      set("--s-nav", "transparent");
+      set("--s-isle", palette.surface);
+      set("--s-isle-open", palette.surface);
+      set("--s-surface", palette.surface);
+      set("--s-raised", palette.surfaceHover);
+      set("--s-hair", palette.border);
+      set("--s-text", palette.text);
+      set("--s-text2", palette.textMuted);
+      set("--s-muted", palette.textMuted);
+      set("--s-accent", palette.accent ?? appearance.accent);
+      set("--s-accent-text", palette.accentText);
+      root.style.setProperty("--wall-dim", String(appearance.wallpaperDim ?? 0.45));
+      root.style.setProperty("--wall-blur", `${appearance.wallpaperBlur ?? 12}px`);
+    }
     root.style.setProperty("--scale", String(appearance.scale));
     root.dataset.mode = mode;
+    setLanguage(appearance.language ?? "ru");
     root.dataset.animations = appearance.animations;
   }, [appearance, themes, mode, target]);
 }

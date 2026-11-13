@@ -201,3 +201,62 @@ pub async fn logs_clear(state: State<'_, Shared>) -> AppResult<()> {
     state.log.info(category::APP, "logs", "журнал событий очищен пользователем");
     Ok(())
 }
+
+/// Сохраняет свою тему (из редактора стиля): тот же формат, что и импорт.
+#[tauri::command]
+pub async fn theme_save(state: State<'_, Shared>, json: String) -> AppResult<ThemeRow> {
+    let row = crate::core::themes::import(state.inner(), &json)?;
+    state.events.emit("theme://changed", ());
+    Ok(row)
+}
+
+/// Выбор своих обоев окна настроек: файл копируется в папку программы.
+#[tauri::command]
+pub async fn wallpaper_pick(app: AppHandle, state: State<'_, Shared>) -> AppResult<Option<String>> {
+    use tauri_plugin_dialog::DialogExt;
+    let app2 = app.clone();
+    let picked = tauri::async_runtime::spawn_blocking(move || {
+        app2.dialog().file().set_title("Обои для окна настроек").add_filter("Изображения", &["jpg", "jpeg", "png", "webp"]).blocking_pick_file()
+    })
+    .await?;
+    let Some(file) = picked.and_then(|f| f.into_path().ok()) else { return Ok(None) };
+    let ext = file.extension().and_then(|e| e.to_str()).map(|e| e.to_lowercase()).filter(|e| ["jpg", "jpeg", "png", "webp"].contains(&e.as_str()));
+    let Some(ext) = ext else { return Err(AppError::invalid("нужна картинка JPG, PNG или WebP")) };
+    if std::fs::metadata(&file)?.len() > 25 * 1024 * 1024 {
+        return Err(AppError::invalid("картинка больше 25 МБ"));
+    }
+    let st = state.inner().clone();
+    for old in ["jpg", "jpeg", "png", "webp"] {
+        let _ = std::fs::remove_file(st.paths.data.join(format!("wallpaper.{old}")));
+    }
+    let name = format!("wallpaper.{ext}");
+    std::fs::copy(&file, st.paths.data.join(&name))?;
+    st.update_settings(&app, |s| {
+        s.appearance.wallpaper = Some(name.clone());
+        Ok(())
+    })?;
+    Ok(Some(name))
+}
+
+#[tauri::command]
+pub async fn wallpaper_clear(app: AppHandle, state: State<'_, Shared>) -> AppResult<()> {
+    let st = state.inner().clone();
+    for old in ["jpg", "jpeg", "png", "webp"] {
+        let _ = std::fs::remove_file(st.paths.data.join(format!("wallpaper.{old}")));
+    }
+    st.update_settings(&app, |s| {
+        s.appearance.wallpaper = None;
+        Ok(())
+    })?;
+    Ok(())
+}
+
+/// Обои в виде data-URL.
+#[tauri::command]
+pub async fn wallpaper_data(state: State<'_, Shared>) -> AppResult<Option<String>> {
+    use base64::Engine;
+    let Some(name) = state.with_settings(|s| s.appearance.wallpaper.clone()) else { return Ok(None) };
+    let mime = if name.ends_with(".png") { "image/png" } else if name.ends_with(".webp") { "image/webp" } else { "image/jpeg" };
+    let bytes = std::fs::read(state.paths.data.join(&name))?;
+    Ok(Some(format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes))))
+}

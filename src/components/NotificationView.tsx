@@ -1,3 +1,4 @@
+import { useState } from "react";
 // Отображение текущего уведомления из очереди Event Manager.
 
 import { Bell, ExternalLink, Hourglass, Puzzle, X } from "lucide-react";
@@ -19,6 +20,10 @@ function KindIcon({ n }: { n: IslandNotification }) {
 
 export function NotificationView({ n }: { n: IslandNotification }) {
   const queued = useIsland((s) => s.notification.queued);
+  const [reply, setReply] = useState<string | null>(null);
+  const send = () => {
+    if (reply?.trim()) ipc.notificationAction(n.id, `reply:${reply.trim()}`).catch(() => {});
+  };
   const canOpen = n.kind === "system";
   return (
     <div className="notif" onMouseEnter={() => ipc.notificationHold(n.id, true).catch(() => {})} onMouseLeave={() => ipc.notificationHold(n.id, false).catch(() => {})}>
@@ -44,10 +49,37 @@ export function NotificationView({ n }: { n: IslandNotification }) {
             ))}
           </div>
         )}
-        {n.actions.length > 0 && (
+        {reply !== null ? (
+          <div className="notif-actions notif-reply" data-no-drag>
+            <input
+              className="reply-input"
+              autoFocus
+              value={reply}
+              maxLength={2000}
+              placeholder="Ответ"
+              aria-label="Ответ"
+              onChange={(e) => setReply(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") send();
+                if (e.key === "Escape") {
+                  e.stopPropagation();
+                  setReply(null);
+                }
+              }}
+            />
+            <button type="button" className="chip" onClick={send} disabled={!reply.trim()}>
+              Отправить
+            </button>
+          </div>
+        ) : n.actions.length > 0 && (
           <div className="notif-actions">
             {n.actions.map((a) => (
-              <button key={a.id} type="button" className="chip" onClick={() => ipc.notificationAction(n.id, a.id).catch(() => {})}>
+              <button
+                key={a.id}
+                type="button"
+                className="chip"
+                onClick={() => (a.id === "reply" ? (setReply(""), ipc.notificationHold(n.id, true).catch(() => {})) : ipc.notificationAction(n.id, a.id).catch(() => {}))}
+              >
                 {a.label}
               </button>
             ))}

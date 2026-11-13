@@ -50,6 +50,18 @@ export function AppearanceSection() {
   const set = (p: Partial<typeof a>) => update("appearance", p).catch(() => {});
   return (
     <Page title="Внешний вид">
+      <Group title="Язык / Language">
+        <Field label="Язык интерфейса">
+          <Segmented
+            value={a.language ?? "ru"}
+            onChange={(language) => set({ language })}
+            options={[
+              { value: "ru", label: "Русский" },
+              { value: "en", label: "English" },
+            ]}
+          />
+        </Field>
+      </Group>
       <Group title="Остров">
         <Field label="Цвет острова">
           <Segmented
@@ -62,9 +74,44 @@ export function AppearanceSection() {
             ]}
           />
         </Field>
+        <Field label="Полоска в полноэкранном режиме" description="Во время полноэкранного видео остров сжимается в тонкую полоску — наведите на неё, чтобы вернуть">
+          <Toggle checked={a.fullscreenStrip ?? true} label="Полоска" onChange={(fullscreenStrip) => set({ fullscreenStrip })} />
+        </Field>
         <Field label="Приветствие при включении" description="«Доброе утро», «Добрый вечер» — при запуске, пробуждении и разблокировке">
           <Toggle checked={a.greeting ?? true} label="Приветствие" onChange={(greeting) => set({ greeting })} />
         </Field>
+      </Group>
+      <Group title="Окно настроек">
+        <Field label={`Непрозрачность: ${Math.round((a.settingsOpacity ?? 1) * 100)}%`}>
+          <Slider value={Math.round((a.settingsOpacity ?? 1) * 100)} min={40} max={100} onCommit={(v) => set({ settingsOpacity: v / 100 })} />
+        </Field>
+        <Field label="Эффект под окном" description="Только Windows 11 и только при неполной непрозрачности">
+          <Segmented
+            value={a.settingsEffect ?? "none"}
+            onChange={(settingsEffect) => set({ settingsEffect })}
+            options={[
+              { value: "none", label: "Нет" },
+              { value: "mica", label: "Mica" },
+              { value: "acrylic", label: "Акрил" },
+            ]}
+          />
+        </Field>
+        <Field label="Обои" description={a.wallpaper ? "Своя картинка выбрана" : "Своя картинка на фоне окна настроек"}>
+          <span className="row gap">
+            <Button onClick={() => ipc.wallpaperPick().catch(() => {})}>Выбрать</Button>
+            {a.wallpaper && <Button onClick={() => ipc.wallpaperClear().catch(() => {})}>Убрать</Button>}
+          </span>
+        </Field>
+        {a.wallpaper && (
+          <Field label={`Затемнение обоев: ${Math.round((a.wallpaperDim ?? 0.45) * 100)}%`}>
+            <Slider value={Math.round((a.wallpaperDim ?? 0.45) * 100)} min={0} max={90} onCommit={(v) => set({ wallpaperDim: v / 100 })} />
+          </Field>
+        )}
+        {a.wallpaper && (
+          <Field label={`Размытие обоев: ${a.wallpaperBlur ?? 12} px`}>
+            <Slider value={a.wallpaperBlur ?? 12} min={0} max={40} onCommit={(v) => set({ wallpaperBlur: v })} />
+          </Field>
+        )}
       </Group>
       <Group title="Тема">
         <Field label="Режим">

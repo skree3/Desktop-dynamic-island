@@ -24,6 +24,12 @@ describe("parseReminder", () => {
     expect(r.text).toBe("забрать посылку");
     expect(new Date(parseReminder("в 7 вечера кино", now)!.at).getHours()).toBe(19);
   });
+  it("числа словами из голосовой заметки", () => {
+    const r = parseReminder("позвонить маме в шесть вечера", now)!;
+    expect(new Date(r.at).getHours()).toBe(18);
+    expect(r.text).toBe("позвонить маме");
+    expect(parseReminder("через двадцать пять минут чай", now)?.at).toBe(now.getTime() + 25 * 60_000);
+  });
   it("обычный текст с числами — не напоминание", () => {
     expect(parseReminder("купить 3 яблока", now)).toBeNull();
     expect(parseReminder("идея для проекта", now)).toBeNull();

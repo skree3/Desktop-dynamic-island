@@ -18,8 +18,24 @@ function clean(text: string): string {
   return text.replace(/\s{2,}/g, " ").replace(/^[\s,.:;—-]+|[\s,.:;—-]+$/g, "");
 }
 
+const UNITS_WORDS: Record<string, number> = {
+  ноль: 0, один: 1, одна: 1, одну: 1, два: 2, две: 2, три: 3, четыре: 4, пять: 5, шесть: 6, семь: 7, восемь: 8, девять: 9,
+  десять: 10, одиннадцать: 11, двенадцать: 12, тринадцать: 13, четырнадцать: 14, пятнадцать: 15, шестнадцать: 16,
+  семнадцать: 17, восемнадцать: 18, девятнадцать: 19,
+};
+const TENS_WORDS: Record<string, number> = { двадцать: 20, тридцать: 30, сорок: 40, пятьдесят: 50 };
+
+/** «в шесть вечера», «через двадцать пять минут» → цифры (для голосовых заметок). */
+export function wordsToDigits(text: string): string {
+  return text.replace(/(^|[^а-яё])((?:двадцать|тридцать|сорок|пятьдесят)(?:\s+(?:один|одна|одну|два|две|три|четыре|пять|шесть|семь|восемь|девять))?|ноль|один|одна|одну|два|две|три|четыре|пять|шесть|семь|восемь|девять|десять|одиннадцать|двенадцать|тринадцать|четырнадцать|пятнадцать|шестнадцать|семнадцать|восемнадцать|девятнадцать)(?=$|[^а-яё])/gi, (_, pre: string, w: string) => {
+    const parts = w.toLowerCase().split(/\s+/);
+    const n = parts.reduce((acc, p) => acc + (TENS_WORDS[p] ?? UNITS_WORDS[p] ?? 0), 0);
+    return pre + n;
+  });
+}
+
 export function parseReminder(input: string, now: Date = new Date()): ParsedReminder | null {
-  const src = input.trim();
+  const src = wordsToDigits(input.trim());
   if (!src) return null;
   const lower = src.toLowerCase();
 

@@ -14,6 +14,7 @@ pub mod brightness;
 pub mod clipboard;
 pub mod foreground;
 pub mod gpu;
+pub mod headphones;
 pub mod media;
 pub mod network;
 pub mod notifications;

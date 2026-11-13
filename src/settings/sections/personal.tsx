@@ -1,3 +1,4 @@
+import { buildPalettes } from "../../utils/style";
 // Разделы: Профили, Темы, Горячие клавиши.
 
 import { useEffect, useState } from "react";
@@ -106,6 +107,72 @@ export function ProfilesSection() {
   );
 }
 
+function StyleEditor({ onSaved }: { onSaved: (id: string) => void }) {
+  const [name, setName] = useState("Мой стиль");
+  const [accent, setAccent] = useState("#f0a64a");
+  const [useBase, setUseBase] = useState(true);
+  const [base, setBase] = useState("#2b4a6f");
+  const [useTint, setUseTint] = useState(false);
+  const [tint, setTint] = useState("#c9a0ff");
+  const { error, run, busy } = useAction();
+  const mode = useResolvedMode();
+  const pal = buildPalettes(accent, useBase ? base : null, useTint ? tint : null);
+  const p = pal[mode];
+  const save = () =>
+    run(async () => {
+      const id = `custom-${Date.now().toString(36)}`;
+      await ipc.themeSave(JSON.stringify({ id, name: name.trim() || "Мой стиль", dark: pal.dark, light: pal.light }));
+      useApp.setState({ themes: await ipc.themes() });
+      onSaved(id);
+    });
+  return (
+    <Group title="Свой стиль">
+      <div className="field wide">
+        <div className="style-editor">
+          <div className="style-colors">
+            <label className="color-pick">
+              <input type="color" value={accent} onChange={(e) => setAccent(e.target.value)} />
+              <span>Акцент</span>
+            </label>
+            <label className="color-pick" style={{ marginTop: 10 }}>
+              <input type="color" value={base} disabled={!useBase} onChange={(e) => setBase(e.target.value)} />
+              <span className="grow">Оттенок фона</span>
+              <Toggle checked={useBase} label="Оттенок фона" onChange={setUseBase} />
+            </label>
+            <label className="color-pick" style={{ marginTop: 10 }}>
+              <input type="color" value={tint} disabled={!useTint} onChange={(e) => setTint(e.target.value)} />
+              <span className="grow">Оттенок текста</span>
+              <Toggle checked={useTint} label="Оттенок текста" onChange={setUseTint} />
+            </label>
+            <div className="row gap" style={{ marginTop: 14 }}>
+              <input className="input grow" value={name} maxLength={40} aria-label="Название стиля" onChange={(e) => setName(e.target.value)} />
+              <Button variant="primary" disabled={busy} onClick={save}>
+                Сохранить и включить
+              </Button>
+            </div>
+            {error && <Note kind="error">{error}</Note>}
+          </div>
+          <div className="style-preview" style={{ background: p.bg, color: p.text }}>
+            <span className="pv-island" style={{ background: "#1c1c1f" }}>
+              <i style={{ background: p.accent }} />
+              <b style={{ background: "#ededed" }} />
+            </span>
+            <span className="pv-card" style={{ background: p.surface }}>
+              Уведомления
+              <span className="pv-tg" style={{ background: p.accent }}>
+                <style>{`.pv-tg::after{background:${p.accentText}}`}</style>
+              </span>
+            </span>
+            <span className="pv-card" style={{ background: p.surface, color: p.textMuted }}>
+              Музыка
+            </span>
+          </div>
+        </div>
+      </div>
+    </Group>
+  );
+}
+
 export function ThemesSection() {
   const themes = useApp((s) => s.themes);
   const a = useApp((s) => s.settings!.appearance);
@@ -139,6 +206,7 @@ export function ThemesSection() {
         })}
       </div>
       {error && <Note kind="error">{error}</Note>}
+      <StyleEditor onSaved={(id) => run(() => update("appearance", { themeId: id }))} />
     </Page>
   );
 }

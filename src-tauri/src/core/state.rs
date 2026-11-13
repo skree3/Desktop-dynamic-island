@@ -67,6 +67,10 @@ pub struct AppState {
     pub downloads: modules::downloads::DownloadsModule,
     pub phone: modules::phone::PhoneModule,
     pub voice: modules::voice::VoiceModule,
+    pub calendar: modules::calendar::CalendarModule,
+    pub pomodoro: modules::pomodoro::PomodoroModule,
+    pub fullscreen: modules::fullscreen::FullscreenModule,
+    pub speech: modules::speech::SpeechModule,
     pub plugins: PluginManager,
     pub hotkeys: HotkeyManager,
     pub ai: AiWindows,
@@ -98,6 +102,10 @@ impl AppState {
             privacy: Default::default(),
             phone: Default::default(),
             voice: Default::default(),
+            calendar: Default::default(),
+            pomodoro: Default::default(),
+            fullscreen: Default::default(),
+            speech: Default::default(),
             downloads: Default::default(),
             hotkeys: Default::default(),
             ai: Default::default(),
@@ -152,6 +160,18 @@ impl AppState {
 
         if old.general.launch_at_startup != new.general.launch_at_startup {
             crate::tray::set_autostart(app, new.general.launch_at_startup, &self.log);
+        }
+        if old.appearance.settings_effect != new.appearance.settings_effect || old.appearance.settings_opacity != new.appearance.settings_opacity {
+            if let Some(w) = tauri::Manager::get_webview_window(app, crate::core::window::SETTINGS) {
+                crate::core::window::apply_settings_effect(&w, self);
+            }
+        }
+        if old.calendar.urls != new.calendar.urls {
+            self.calendar.refresh(self);
+        }
+        if old.notifications.dnd_allow != new.notifications.dnd_allow {
+            // Список исключений изменился — переустанавливаем «Не беспокоить» с новым списком.
+            self.notifications.sync_popups(self, false);
         }
         if old.position != new.position && !crate::core::window::take_skip_apply() {
             crate::core::window::apply_position(app, self);

@@ -606,3 +606,103 @@ pub async fn game_mode_set_manual(app: AppHandle, state: State<'_, Shared>, manu
 pub async fn game_mode_foreground() -> AppResult<Option<ForegroundInfo>> {
     blocking(|| Ok(os::foreground::current())).await
 }
+
+#[tauri::command]
+pub async fn phone_send_file(state: State<'_, Shared>, path: String) -> AppResult<()> {
+    crate::modules::phone::PhoneModule::send_file(state.inner().clone(), std::path::PathBuf::from(path)).await
+}
+
+// ---- календарь и помодоро ----
+
+#[tauri::command]
+pub async fn calendar_events(state: State<'_, Shared>) -> AppResult<(Vec<crate::modules::calendar::CalEvent>, Option<String>)> {
+    let err = state.calendar.error.lock().unwrap_or_else(|p| p.into_inner()).clone();
+    Ok((state.calendar.upcoming(), err))
+}
+
+#[tauri::command]
+pub async fn calendar_refresh(state: State<'_, Shared>) -> AppResult<()> {
+    state.calendar.refresh(state.inner());
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn pomodoro_status(state: State<'_, Shared>) -> AppResult<crate::modules::pomodoro::PomodoroState> {
+    Ok(state.pomodoro.status(state.inner()))
+}
+
+#[tauri::command]
+pub async fn pomodoro_command(state: State<'_, Shared>, action: String) -> AppResult<()> {
+    let st = state.inner();
+    match action.as_str() {
+        "start" => st.pomodoro.start(st),
+        "pause" => st.pomodoro.pause(st),
+        "stop" => {
+            st.pomodoro.stop(st);
+            Ok(())
+        }
+        "skip" => {
+            st.pomodoro.skip(st);
+            Ok(())
+        }
+        _ => Err(crate::core::error::AppError::invalid("неизвестное действие")),
+    }
+}
+
+#[tauri::command]
+pub async fn island_strip(state: State<'_, Shared>) -> AppResult<bool> {
+    Ok(state.fullscreen.strip())
+}
+
+// ---- звук программ и наушники ----
+
+#[tauri::command]
+pub async fn app_volumes() -> AppResult<Vec<crate::platform::types::AppVolume>> {
+    tauri::async_runtime::spawn_blocking(crate::platform::os::audio::app_volumes).await?
+}
+
+#[tauri::command]
+pub async fn app_volume_set(id: String, level: Option<f32>, muted: Option<bool>) -> AppResult<()> {
+    tauri::async_runtime::spawn_blocking(move || crate::platform::os::audio::set_app_volume(&id, level, muted)).await?
+}
+
+#[tauri::command]
+pub async fn headphones_list() -> AppResult<Vec<crate::platform::types::Headphone>> {
+    tauri::async_runtime::spawn_blocking(crate::platform::os::headphones::list).await?
+}
+
+#[tauri::command]
+pub async fn headphone_connect(id: String, connect: bool) -> AppResult<()> {
+    tauri::async_runtime::spawn_blocking(move || crate::platform::os::headphones::set_connected(&id, connect)).await?
+}
+
+// ---- распознавание текста, перевод, речь ----
+
+#[tauri::command]
+pub async fn ocr_shelf_item(state: State<'_, Shared>, id: i64) -> AppResult<String> {
+    let item = crate::modules::shelf::list(state.inner())?.into_iter().find(|i| i.id == id).ok_or_else(|| crate::core::error::AppError::NotFound("файла нет на полке".into()))?;
+    tauri::async_runtime::spawn_blocking(move || crate::modules::ocr::recognize(std::path::Path::new(&item.path))).await?
+}
+
+#[tauri::command]
+pub async fn translate_text(text: String) -> AppResult<(String, String)> {
+    tauri::async_runtime::spawn_blocking(move || crate::modules::ocr::translate(&text)).await?
+}
+
+#[tauri::command]
+pub async fn speech_status(state: State<'_, Shared>) -> AppResult<crate::modules::speech::SpeechStatus> {
+    Ok(state.speech.status(state.inner()))
+}
+
+#[tauri::command]
+pub async fn speech_install(state: State<'_, Shared>, lang: String) -> AppResult<()> {
+    let st = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || st.speech.install(&st, &lang)).await?
+}
+
+#[tauri::command]
+pub async fn voice_transcribe(state: State<'_, Shared>, name: String) -> AppResult<String> {
+    let st = state.inner().clone();
+    let lang = st.with_settings(|s| s.speech.lang.clone());
+    tauri::async_runtime::spawn_blocking(move || st.speech.transcribe(&st, &name, &lang)).await?
+}

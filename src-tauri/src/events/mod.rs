@@ -127,6 +127,10 @@ impl EventManager {
         self.lock().extra_muted = apps;
     }
 
+    pub fn dnd(&self) -> bool {
+        self.lock().queue.dnd
+    }
+
     pub fn set_dnd(&self, on: bool) {
         self.lock().queue.dnd = on;
         self.broadcast_notification();

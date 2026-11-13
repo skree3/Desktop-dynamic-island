@@ -38,6 +38,9 @@ socket2 = { version = "0.6", features = ["all"] }
 # Голосовые заметки: запись с микрофона в WAV.
 cpal = "0.15"
 hound = "3"
+# Голос → текст (Vosk загружается по требованию) и распаковка моделей.
+libloading = "0.8"
+zip = { version = "2", default-features = false, features = ["deflate"] }
 png = "0.17"
 semver = "1"
 nvml-wrapper = "0.10"
@@ -54,6 +57,9 @@ windows = { version = "0.61", features = [
   "Foundation",
   "Foundation_Collections",
   "Media_Control",
+  "Media_Ocr",
+  "Graphics_Imaging",
+  "Globalization",
   "Storage_Streams",
   "Devices_Radios",
   "Devices_Bluetooth",
@@ -84,6 +90,9 @@ windows = { version = "0.61", features = [
   "Win32_Media_Audio",
   "Win32_Media_Audio_Endpoints",
   "Win32_Devices_FunctionDiscovery",
+  "Win32_Devices_Bluetooth",
+  "Win32_Devices_DeviceAndDriverInstallation",
+  "Win32_Devices_Properties",
   "Win32_Devices_Display",
   "Win32_Graphics_Gdi",
   "Win32_Graphics_Dwm",

@@ -1,0 +1,48 @@
+# Flatpak-пакет Desktop Island. Собирается в GitHub Actions из готового .deb
+# (см. .github/workflows/release.yml, задача flatpak). Локально:
+#   flatpak-builder --user --install --force-clean build packaging/flatpak/app.desktopisland.DesktopIsland.yml
+# (рядом с манифестом должен лежать DesktopIsland-linux-x64.deb).
+#
+# Ограничения песочницы: чтение чужих уведомлений через D-Bus в Flatpak
+# недоступно (нельзя стать «монитором» шины) — для этого используйте .deb/.rpm/AppImage.
+id: app.desktopisland.DesktopIsland
+runtime: org.gnome.Platform
+runtime-version: '47'
+sdk: org.gnome.Sdk
+command: desktop-island
+finish-args:
+  - --share=ipc
+  - --share=network
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --socket=pulseaudio
+  - --device=dri
+  - --device=all
+  - --filesystem=xdg-download
+  - --filesystem=xdg-pictures:ro
+  - --talk-name=org.freedesktop.Notifications
+  - --talk-name=org.kde.StatusNotifierWatcher
+  - --talk-name=org.freedesktop.ScreenSaver
+  - --talk-name=org.gnome.ScreenSaver
+  - --talk-name=org.mpris.MediaPlayer2.*
+  - --system-talk-name=org.freedesktop.login1
+  - --system-talk-name=org.bluez
+  - --system-talk-name=org.freedesktop.UPower
+  - --system-talk-name=org.freedesktop.NetworkManager
+modules:
+  - name: desktop-island
+    buildsystem: simple
+    sources:
+      - type: file
+        path: DesktopIsland-linux-x64.deb
+    build-commands:
+      - ar -x DesktopIsland-linux-x64.deb
+      - tar -xf data.tar.*
+      - install -Dm755 usr/bin/desktop-island /app/bin/desktop-island
+      - |
+        for size in 32x32 128x128 256x256@2; do
+          src="usr/share/icons/hicolor/${size}/apps/desktop-island.png"
+          [ -f "$src" ] && install -Dm644 "$src" "/app/share/icons/hicolor/${size%@2}/apps/app.desktopisland.DesktopIsland.png" || true
+        done
+      - install -Dm644 "usr/share/applications/Desktop Island.desktop" /app/share/applications/app.desktopisland.DesktopIsland.desktop
+      - desktop-file-edit --set-icon=app.desktopisland.DesktopIsland --set-key=Exec --set-value=desktop-island /app/share/applications/app.desktopisland.DesktopIsland.desktop

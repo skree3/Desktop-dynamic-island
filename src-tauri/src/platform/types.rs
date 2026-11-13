@@ -257,3 +257,23 @@ pub struct DeviceUse {
     /// Когда начато использование (unix ms).
     pub since: i64,
 }
+
+/// Громкость отдельной программы (сеанс звука).
+#[derive(Debug, Clone, Serialize, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AppVolume {
+    pub id: String,
+    pub name: String,
+    pub level: f32,
+    pub muted: bool,
+}
+
+/// Bluetooth-наушники/колонка: подключение и заряд.
+#[derive(Debug, Clone, Serialize, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Headphone {
+    pub id: String,
+    pub name: String,
+    pub connected: bool,
+    pub battery: Option<u8>,
+}

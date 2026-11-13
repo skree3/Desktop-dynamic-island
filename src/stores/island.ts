@@ -29,6 +29,9 @@ interface IslandStore {
   /** Приветствие, показываемое в свёрнутом острове несколько секунд. */
   greeting: string | null;
   setGreeting: (g: string | null) => void;
+  /** Полноэкранное приложение — остров сжат в тонкую полоску. */
+  strip: boolean;
+  setStrip: (s: boolean) => void;
   expand: (card?: string | null) => void;
   collapse: () => void;
   setCard: (card: string) => void;
@@ -53,6 +56,8 @@ export const useIsland = create<IslandStore>((set, get) => ({
   privacy: { microphone: [], camera: [], micMuted: null },
   greeting: null,
   setGreeting: (greeting) => set({ greeting }),
+  strip: false,
+  setStrip: (strip) => set({ strip }),
 
   expand: (card) => set({ mode: "expanded", activeCard: card ?? get().activeCard }),
   collapse: () => {

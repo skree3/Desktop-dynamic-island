@@ -33,28 +33,42 @@ fn protected_app(app: &str) -> bool {
     ["безопасность", "security", "defender", "защитник"].iter().any(|k| a.contains(k))
 }
 
+/// Windows: «Не беспокоить», пока работает остров. Если есть приложения-исключения,
+/// включается «Только приоритет», а они добавляются в приоритетные (и потом убираются).
+/// Токен: `win:<прежний режим>|<добавленные приложения через TAB>`.
 #[cfg(windows)]
-fn hide_system_popups() -> Option<String> {
+fn hide_system_popups(st: &Shared) -> Option<String> {
     use crate::platform::os::quiet;
     // Пользователь уже сам включил «Не беспокоить» — ничего не трогаем и потом не выключаем.
-    match quiet::get() {
-        Some(0) if quiet::set(quiet::ALARMS_ONLY) => Some("win:0".into()),
-        _ => None,
+    if quiet::get() != Some(0) {
+        return None;
     }
+    let allow = st.with_settings(|s| s.notifications.dnd_allow.clone());
+    let (mode, added) = if allow.is_empty() { (quiet::ALARMS_ONLY, vec![]) } else { (quiet::PRIORITY_ONLY, quiet::allow_apps(&allow)) };
+    if !quiet::set(mode) {
+        quiet::disallow_apps(&added);
+        return None;
+    }
+    Some(format!("win:0|{}", added.join(";")))
 }
 
 #[cfg(windows)]
 fn restore_system_popups(token: &str) {
-    if let Some(prev) = token.strip_prefix("win:").and_then(|v| v.parse::<u32>().ok()) {
+    use crate::platform::os::quiet;
+    let Some(rest) = token.strip_prefix("win:") else { return };
+    let (prev, added) = rest.split_once('|').unwrap_or((rest, ""));
+    let added: Vec<String> = added.split(';').filter(|a| !a.is_empty()).map(String::from).collect();
+    quiet::disallow_apps(&added);
+    if let Ok(prev) = prev.parse::<u32>() {
         // Вернуть, только если режим не меняли вручную, пока работал остров.
-        if crate::platform::os::quiet::get() == Some(crate::platform::os::quiet::ALARMS_ONLY) {
-            crate::platform::os::quiet::set(prev);
+        if matches!(quiet::get(), Some(quiet::ALARMS_ONLY) | Some(quiet::PRIORITY_ONLY)) {
+            quiet::set(prev);
         }
     }
 }
 
 #[cfg(target_os = "linux")]
-fn hide_system_popups() -> Option<String> {
+fn hide_system_popups(_st: &Shared) -> Option<String> {
     crate::platform::linux::banners::hide_popups()
 }
 
@@ -114,7 +128,7 @@ impl NotificationsModule {
         }
         match (desired, g.clone()) {
             (true, None) => {
-                if let Some(token) = hide_system_popups() {
+                if let Some(token) = hide_system_popups(st) {
                     let _ = std::fs::write(&backup, &token);
                     st.log.info(category::SYSTEM_ACTION, "notifications", "системные баннеры скрыты — уведомления показывает остров");
                     *g = Some(token);

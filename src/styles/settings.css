@@ -1,17 +1,17 @@
 /* Окно настроек: группы-«острова» слева, раздел справа.
    Графитовая палитра, один янтарный акцент, волосяные разделители. */
+:root {
+  --s-bg: #111112; --s-nav: transparent; --s-isle: #19191b; --s-isle-open: #1c1c1e; --s-surface: #19191b; --s-raised: #232325;
+  --s-hair: rgba(237, 237, 237, 0.06); --s-text: #ededed; --s-text2: #a1a1a6; --s-muted: #85858b; --s-accent: #f0a64a; --s-accent-text: #141415;
+}
 .settings {
-  --s-bg: #111112; --s-nav: #111112; --s-isle: #19191b; --s-isle-open: #1c1c1e; --s-surface: #19191b; --s-raised: #232325;
-  --s-hair: rgba(237, 237, 237, 0.06); --s-text: #ededed; --s-text2: #a1a1a6; --s-muted: #85858b; --s-accent: #f0a64a;
-  --accent: var(--s-accent); --accent-text: #141415; --surface: var(--s-surface); --surface-hover: var(--s-raised); --border: var(--s-hair);
+  --accent: var(--s-accent); --accent-text: var(--s-accent-text); --surface: var(--s-surface); --surface-hover: var(--s-raised); --border: var(--s-hair);
   --text: var(--s-text); --text-muted: var(--s-muted); --bg: var(--s-bg);
+  position: relative; isolation: isolate;
   display: grid; grid-template-columns: 320px 1fr; height: 100vh; background: var(--s-bg); color: var(--s-text); user-select: text;
   font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; font-size: 14px; line-height: 20px;
 }
-:root[data-mode="light"] .settings {
-  --s-bg: #f5f5f6; --s-nav: #f5f5f6; --s-isle: #ffffff; --s-isle-open: #ffffff; --s-surface: #ffffff; --s-raised: #ececee;
-  --s-hair: rgba(23, 23, 23, 0.08); --s-text: #171717; --s-text2: #525252; --s-muted: #6b6b70; --s-accent: #b86e14; --accent-text: #ffffff;
-}
+
 .settings-loading { height: 100vh; display: flex; align-items: center; justify-content: center; }
 
 .isles { padding: 16px 16px 24px 20px; display: flex; flex-direction: column; gap: 8px; background: var(--s-nav); overflow-y: auto; }
@@ -156,3 +156,25 @@ code { font-family: ui-monospace, Consolas, monospace; font-size: 12px; backgrou
 /* Без лишнего текста: подзаголовки разделов скрыты, пояснения — у самих настроек */
 .page-head p { display: none; }
 .group-body > p, .group-body > .small, .group-body > .muted { margin: 0; padding: 10px 16px; font-size: 12px; line-height: 16px; color: var(--s-muted); }
+
+/* Прозрачное окно и свои обои */
+:root[data-window="settings"] body { background: transparent; }
+.settings-wall { position: fixed; inset: -60px; z-index: -1; background-size: cover; background-position: center; filter: blur(var(--wall-blur, 12px)); transform: translateZ(0); }
+.settings-wall::after { content: ""; position: absolute; inset: 0; background: var(--s-bg); opacity: calc(0.35 + var(--wall-dim, 0.45) * 0.65); }
+.settings.has-wall { background: transparent; }
+.settings.has-wall .group-body, .settings.has-wall .isle, .settings.has-wall .pos-card { backdrop-filter: blur(18px); }
+
+/* Свой стиль */
+.style-editor { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 16px; align-items: start; }
+.style-colors { display: flex; flex-direction: column; }
+.color-pick { display: flex; align-items: center; gap: 12px; }
+.color-pick input[type="color"] { width: 36px; height: 28px; padding: 0; border: 0; border-radius: 8px; background: none; cursor: pointer; }
+.color-pick input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+.color-pick input[type="color"]::-webkit-color-swatch { border: 1px solid var(--s-hair); border-radius: 8px; }
+.style-preview { border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 10px; box-shadow: inset 0 0 0 1px var(--s-hair); }
+.style-preview .pv-island { align-self: center; width: 120px; height: 24px; border-radius: 12px; display: flex; align-items: center; gap: 6px; padding: 0 10px; }
+.style-preview .pv-island i { width: 8px; height: 8px; border-radius: 4px; }
+.style-preview .pv-island b { flex: 1; height: 3px; border-radius: 2px; opacity: 0.8; }
+.style-preview .pv-card { border-radius: 10px; padding: 10px; font-size: 12px; display: flex; justify-content: space-between; align-items: center; }
+.style-preview .pv-tg { width: 30px; height: 16px; border-radius: 8px; position: relative; }
+.style-preview .pv-tg::after { content: ""; position: absolute; right: 2px; top: 2px; width: 12px; height: 12px; border-radius: 6px; }

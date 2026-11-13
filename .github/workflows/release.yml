@@ -75,8 +75,31 @@ jobs:
           name: linux
           path: out/*
 
+  flatpak:
+    needs: [linux]
+    runs-on: ubuntu-latest
+    container:
+      image: bilelmoussaoui/flatpak-github-actions:gnome-47
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux
+          path: linux
+      - name: Сборка Flatpak
+        run: |
+          cp linux/DesktopIsland-linux-x64.deb packaging/flatpak/
+          flatpak-builder --repo=repo --force-clean --install-deps-from=flathub build packaging/flatpak/app.desktopisland.DesktopIsland.yml
+          flatpak build-bundle repo DesktopIsland-linux-x64.flatpak app.desktopisland.DesktopIsland
+          mkdir -p out && mv DesktopIsland-linux-x64.flatpak out/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flatpak
+          path: out/*
+
   release:
-    needs: [windows, linux]
+    needs: [windows, linux, flatpak]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4

@@ -22,6 +22,7 @@ import {
   WifiOff,
 } from "lucide-react";
 import { Confirm, IconButton, Note, Slider, Spinner } from "../components/ui";
+import { AppMixer, HeadphonesRow } from "../components/SoundExtras";
 import { useLoad, usePoll } from "../hooks/common";
 import { errorMessage, ipc } from "../services/ipc";
 import { useApp } from "../stores/app";
@@ -187,6 +188,8 @@ export default function QuickCard() {
           )}
         </div>
       )}
+      {modules?.volume && <HeadphonesRow onError={setError} />}
+      {modules?.volume && <AppMixer onError={setError} />}
 
       {modules?.brightness && (
         <>

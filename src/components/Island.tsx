@@ -116,6 +116,7 @@ export function Island() {
 
   const top = pickCompact(activities);
   const greeting = useIsland((s) => s.greeting);
+  const strip = useIsland((s) => s.strip);
   const wide = !!greeting || (!!top && (top.kind === "music" ? settings.music.showInCompact : true));
 
   const size = useMemo(() => {
@@ -124,9 +125,11 @@ export function Island() {
       const stackLines = Math.min(2, notification.stack?.length ?? 0);
       return { w: 360 * scale, h: ((notification.actions.length ? 104 : 76) + stackLines * 17) * scale };
     }
+    // Полноэкранное видео: тонкая полоска, по наведению — обычный остров.
+    if (strip && !hovered && !greeting) return { w: 96 * scale, h: 6 * scale };
     const w = (wide ? 280 : settings.systemMonitor.showInCompact ? 244 : 200) * scale;
     return hovered ? { w: w + 12 * scale, h: (COMPACT_H + 2) * scale } : { w, h: COMPACT_H * scale };
-  }, [mode, contentH, notification, wide, hovered, scale, settings.systemMonitor.showInCompact]);
+  }, [mode, contentH, notification, wide, hovered, scale, settings.systemMonitor.showInCompact, strip, greeting]);
 
   // Овальная форма: в свёрнутом виде — полная «пилюля», раскрытый остров — крупные скругления.
   const radius = mode === "expanded" ? 30 * scale : mode === "notification" ? 28 * scale : (size.h / 2);
@@ -250,7 +253,7 @@ export function Island() {
   return (
     <div className="island-root" style={{ paddingLeft: SIDE, paddingRight: SIDE }}>
       <motion.div
-        className={`island mode-${mode} ${attached ? "attached" : "floating"} tone-${settings.appearance.islandTone ?? "graphite"}`}
+        className={`island mode-${mode} ${attached ? "attached" : "floating"} tone-${settings.appearance.islandTone ?? "graphite"} ${strip && !hovered && mode === "compact" && !greeting ? "is-strip" : ""}`}
         initial={false}
         animate={{
           width: size.w,

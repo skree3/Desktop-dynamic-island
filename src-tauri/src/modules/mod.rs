@@ -14,6 +14,11 @@ pub mod privacy;
 pub mod phone;
 pub mod voice;
 pub mod greeting;
+pub mod calendar;
+pub mod pomodoro;
+pub mod fullscreen;
+pub mod speech;
+pub mod ocr;
 pub mod shelf;
 pub mod system_monitor;
 pub mod timers;
@@ -128,5 +133,7 @@ pub fn reconcile(app: &AppHandle, st: &Shared) {
     st.privacy.set_running(app, st, s.modules.privacy);
     st.downloads.set_running(app, st, s.modules.downloads);
     st.phone.set_running(app, st, s.phone.enabled);
+    st.calendar.set_running(st, !s.calendar.urls.is_empty());
+    st.fullscreen.set_running(st, s.appearance.fullscreen_strip && st.island_visible());
     st.updater.set_running(app, st, s.general.check_updates);
 }

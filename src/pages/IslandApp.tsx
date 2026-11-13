@@ -30,6 +30,8 @@ export default function IslandApp() {
     unsubs.push(on<boolean>("island://attached", (a) => useIsland.getState().setAttached(a)));
     unsubs.push(on<PrivacyState>("privacy://state", (p) => useIsland.getState().setPrivacy(p)));
     unsubs.push(on<string>("voice://play", (name) => playVoice(name).catch(() => {})));
+    unsubs.push(on<boolean>("island://strip", (s) => useIsland.getState().setStrip(s)));
+    ipc.islandStrip().then((s) => useIsland.getState().setStrip(s)).catch(() => {});
     let greetTimer: number | undefined;
     unsubs.push(
       on<string>("island://greet", (reason) => {
