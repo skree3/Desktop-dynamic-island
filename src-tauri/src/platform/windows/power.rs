@@ -31,16 +31,66 @@ pub fn state() -> AppResult<PowerState> {
         },
         secs_remaining: if s.BatteryLifeTime != u32::MAX && has_battery { Some(s.BatteryLifeTime as u64) } else { None },
         saver: Some(s.SystemStatusFlag == 1),
-        // Публичного API включения «Экономии заряда» нет — только чтение состояния.
-        saver_can_toggle: false,
-        saver_backend: Some("Windows Battery Saver (только чтение)".into()),
+        // Включить можно только от батареи: порог «включать при заряде ниже» = 100 %.
+        saver_can_toggle: has_battery && s.ACLineStatus == 0,
+        saver_backend: Some(if has_battery && s.ACLineStatus == 0 {
+            "Энергосбережение Windows".into()
+        } else {
+            "От сети энергосбережение включается в параметрах Windows".into()
+        }),
     })
 }
 
-pub fn set_saver(_on: bool) -> AppResult<()> {
-    Err(AppError::unsupported(
-        "Windows не предоставляет публичного API для переключения экономии заряда. Откройте «Параметры → Питание».",
-    ))
+const SUB_ENERGYSAVER: windows::core::GUID = windows::core::GUID::from_u128(0xde830923_a562_41af_a086_e3a2c6bad2da);
+const ESBATTTHRESHOLD: windows::core::GUID = windows::core::GUID::from_u128(0xe69653ca_cf7f_4f05_aa73_cb833fa90ad4);
+
+fn saved_threshold_path() -> std::path::PathBuf {
+    std::env::temp_dir().join("desktop-island-saver-threshold.txt")
+}
+
+/// Порог заряда, ниже которого Windows сама включает энергосбережение (от батареи).
+fn threshold_rw(new: Option<u32>) -> AppResult<u32> {
+    use windows::Win32::Foundation::{LocalFree, HLOCAL, WIN32_ERROR};
+    use windows::Win32::System::Power::{PowerGetActiveScheme, PowerReadDCValueIndex, PowerSetActiveScheme, PowerWriteDCValueIndex};
+    unsafe {
+        let mut scheme: *mut windows::core::GUID = std::ptr::null_mut();
+        if PowerGetActiveScheme(None, &mut scheme) != WIN32_ERROR(0) || scheme.is_null() {
+            return Err(AppError::system("не удалось прочитать схему питания"));
+        }
+        let mut cur = 0u32;
+        let r = PowerReadDCValueIndex(None, Some(scheme), Some(&SUB_ENERGYSAVER), Some(&ESBATTTHRESHOLD), &mut cur);
+        let mut result = if r == 0 { Ok(cur) } else { Err(AppError::system("параметр энергосбережения недоступен")) };
+        if let (Ok(_), Some(v)) = (&result, new) {
+            let w = PowerWriteDCValueIndex(None, scheme, Some(&SUB_ENERGYSAVER), Some(&ESBATTTHRESHOLD), v);
+            if w != 0 || PowerSetActiveScheme(None, Some(scheme)) != WIN32_ERROR(0) {
+                result = Err(AppError::PermissionDenied("Windows не дал изменить энергосбережение".into()));
+            }
+        }
+        let _ = LocalFree(Some(HLOCAL(scheme as _)));
+        result
+    }
+}
+
+pub fn set_saver(on: bool) -> AppResult<()> {
+    let st = state()?;
+    if !(st.has_battery && st.on_ac == Some(false)) {
+        return Err(AppError::unsupported("от сети энергосбережение включается только в «Параметры → Питание»"));
+    }
+    let path = saved_threshold_path();
+    if on {
+        let cur = threshold_rw(None)?;
+        if cur < 100 && !path.exists() {
+            let _ = std::fs::write(&path, cur.to_string());
+        }
+        threshold_rw(Some(100))?;
+    } else {
+        let saved = std::fs::read_to_string(&path).ok().and_then(|s| s.trim().parse::<u32>().ok()).unwrap_or(20);
+        // Если заряд уже ниже прежнего порога, Windows сразу включила бы режим снова.
+        let pct = st.percent.unwrap_or(100) as u32;
+        threshold_rw(Some(if pct <= saved { 0 } else { saved }))?;
+        let _ = std::fs::remove_file(&path);
+    }
+    Ok(())
 }
 
 fn enable_shutdown_privilege() -> AppResult<()> {

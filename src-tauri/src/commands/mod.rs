@@ -2,6 +2,7 @@
 //! проверяют входные данные и возвращают типизированные ошибки.
 
 pub mod app;
+pub mod extras;
 pub mod integrations;
 pub mod modules;
 pub mod settings;
@@ -142,6 +143,20 @@ macro_rules! all_commands {
             $crate::commands::integrations::apps_search,
             $crate::commands::integrations::apps_icon,
             $crate::commands::integrations::apps_launch,
+            $crate::commands::extras::apps_launch_admin,
+            $crate::commands::extras::kbd_state,
+            $crate::commands::extras::kbd_next_layout,
+            $crate::commands::extras::kbd_caps_toggle,
+            $crate::commands::extras::airplane_set,
+            $crate::commands::extras::vpn_status,
+            $crate::commands::extras::vpn_set,
+            $crate::commands::extras::vpn_pick_path,
+            $crate::commands::extras::fonts_list,
+            $crate::commands::extras::font_pick,
+            $crate::commands::extras::font_data,
+            $crate::commands::extras::font_remove,
+            $crate::commands::extras::sound_pick,
+            $crate::commands::extras::sound_data,
             $crate::commands::integrations::apps_refresh,
             $crate::commands::integrations::apps_set_favorite,
             $crate::commands::integrations::apps_set_hidden,

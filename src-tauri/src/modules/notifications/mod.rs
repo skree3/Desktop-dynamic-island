@@ -276,6 +276,8 @@ impl NotificationsModule {
             }
             (NotificationKind::Internal, "update") if n.source == "updater" => {
                 let (app, st) = (app.clone(), st.clone());
+                st.events.dismiss(notification_id);
+                st.events.push(crate::events::internal_notification("updater:progress", "Desktop Island", "Загружаю обновление…", "Приложение перезапустится само", Priority::Normal));
                 tauri::async_runtime::spawn_blocking(move || {
                     if let Err(e) = crate::modules::updater::install_and_quit(&app, &st) {
                         st.events.push(crate::events::internal_notification("updater", "Desktop Island", "Обновление не установлено", e.to_string(), Priority::High));
@@ -287,6 +289,9 @@ impl NotificationsModule {
             }
             (NotificationKind::Internal, a) if n.source.starts_with("phone") => {
                 st.phone.action(st, &n.source, a)?;
+            }
+            (NotificationKind::Internal, a) if n.source.starts_with("steam:") => {
+                crate::modules::steam::action(&n.source, a)?;
             }
             (NotificationKind::Internal, a) if n.source.starts_with("note:") => {
                 crate::modules::notes::reminder_action(st, &n.source, a)?;

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useApp } from "../stores/app";
 import { hexToRgba } from "../utils/format";
 import { setLanguage } from "../i18n";
+import { applyFont } from "../utils/fonts";
 
 function systemDark(): boolean {
   return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? true;
@@ -26,6 +27,12 @@ export function useTheme(target: "island" | "settings") {
   const appearance = useApp((s) => s.settings?.appearance);
   const themes = useApp((s) => s.themes);
   const mode = useResolvedMode();
+  const font = appearance?.font ?? "system";
+
+  // Шрифт интерфейса — для всего окна сразу (остров, меню, уведомления, настройки).
+  useEffect(() => {
+    applyFont(font).catch(() => {});
+  }, [font]);
 
   useEffect(() => {
     if (!appearance) return;

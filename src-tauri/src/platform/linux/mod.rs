@@ -15,6 +15,7 @@ pub mod clipboard;
 pub mod foreground;
 pub mod gpu;
 pub mod headphones;
+pub mod keyboard;
 pub mod media;
 pub mod network;
 pub mod notifications;
@@ -23,6 +24,7 @@ pub mod privacy;
 pub mod session;
 pub mod proxy;
 pub mod shell;
+pub mod vpn;
 pub mod window;
 
 use std::future::Future;

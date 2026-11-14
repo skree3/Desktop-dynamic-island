@@ -23,6 +23,9 @@ pub mod shelf;
 pub mod system_monitor;
 pub mod timers;
 pub mod updater;
+pub mod indicators;
+pub mod steam;
+pub mod assets;
 
 use serde::Serialize;
 use tauri::AppHandle;
@@ -136,4 +139,6 @@ pub fn reconcile(app: &AppHandle, st: &Shared) {
     st.calendar.set_running(st, !s.calendar.urls.is_empty());
     st.fullscreen.set_running(st, s.appearance.fullscreen_strip && st.island_visible());
     st.updater.set_running(app, st, s.general.check_updates);
+    st.indicators.set_running(app, st, true);
+    st.steam.set_running(st, s.modules.steam);
 }

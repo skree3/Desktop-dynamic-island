@@ -13,6 +13,7 @@ import { NotificationView } from "./NotificationView";
 import { ipc } from "../services/ipc";
 import { useApp } from "../stores/app";
 import { pickCompact, useIsland } from "../stores/island";
+import { playSound, stopSound } from "../utils/sounds";
 
 /** Поле по бокам окна под вогнутые «мостики» к краю экрана. */
 const SIDE = 14;
@@ -70,30 +71,6 @@ function useHitbox(width: number, height: number, settleMs: number) {
   }, [width, height, settleMs]);
 }
 
-/** Короткий мягкий сигнал острова (вместо системного звука Windows). */
-let audioCtx: AudioContext | null = null;
-export function chime() {
-  try {
-    audioCtx ??= new AudioContext();
-    const ctx = audioCtx;
-    const t = ctx.currentTime;
-    for (const [freq, at] of [[880, 0], [1320, 0.09]] as const) {
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      o.type = "sine";
-      o.frequency.value = freq;
-      g.gain.setValueAtTime(0, t + at);
-      g.gain.linearRampToValueAtTime(0.06, t + at + 0.015);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + at + 0.32);
-      o.connect(g).connect(ctx.destination);
-      o.start(t + at);
-      o.stop(t + at + 0.34);
-    }
-  } catch {
-    /* звук недоступен — не страшно */
-  }
-}
-
 export function Island() {
   const mode = useIsland((s) => s.mode);
   const activeCard = useIsland((s) => s.activeCard);
@@ -139,10 +116,25 @@ export function Island() {
   useHitbox(size.w, size.h, ms);
 
   // Свой звук острова при новом уведомлении (системный приглушён режимом «Не беспокоить»).
+  // Окончание таймера — отдельный сигнал-будильник: звучит, пока уведомление не закроют
+  // (или заданное время). Звуки одного типа не накладываются — у каждого свой канал.
   const notifId = notification?.id;
+  const isTimer = notification?.kind === "timer";
+  const sounds = settings.sounds;
   useEffect(() => {
-    if (notifId && settings.notifications.sound && !settings.notifications.dnd) chime();
-  }, [notifId, settings.notifications.sound, settings.notifications.dnd]);
+    if (!notifId) return;
+    if (isTimer) {
+      if (!sounds.timerEnabled) return;
+      playSound("timer", sounds.timer, sounds.timerVolume, { loop: true, limitSecs: sounds.timerLimitSecs || undefined });
+      return () => stopSound("timer");
+    }
+    if (settings.notifications.sound && !settings.notifications.dnd) playSound("notification", sounds.notification, sounds.notificationVolume);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notifId]);
+  // Раскрыли остров во время сигнала — это тоже «остановить».
+  useEffect(() => {
+    if (mode === "expanded") stopSound("timer");
+  }, [mode]);
 
   useEffect(() => {
     const active = mode === "expanded" && activeCard ? [activeCard] : [];

@@ -1,7 +1,7 @@
 // Поиск и запуск установленных приложений.
 
 import { useEffect, useRef, useState } from "react";
-import { Globe, Plus, RefreshCw, Search, Star } from "lucide-react";
+import { Globe, Plus, RefreshCw, Search, ShieldCheck, Star } from "lucide-react";
 import { AppIcon, IconButton, Note, Spinner } from "../components/ui";
 import { errorMessage, ipc } from "../services/ipc";
 import { useIsland } from "../stores/island";
@@ -39,9 +39,9 @@ export default function AppsCard() {
     };
   }, [query]);
 
-  const launch = async (a: AppEntry) => {
+  const launch = async (a: AppEntry, admin = false) => {
     try {
-      await ipc.appsLaunch(a.id);
+      await (admin ? ipc.appsLaunchAdmin(a.id) : ipc.appsLaunch(a.id));
       useIsland.getState().collapse();
     } catch (e) {
       setError(errorMessage(e));
@@ -67,7 +67,8 @@ export default function AppsCard() {
             if (!items?.length) return;
             if (e.key === "ArrowDown") setSel((s) => Math.min(items.length - 1, s + 1));
             if (e.key === "ArrowUp") setSel((s) => Math.max(0, s - 1));
-            if (e.key === "Enter") launch(items[sel]);
+            // Ctrl+Shift+Enter — от имени администратора (как в меню «Пуск»).
+            if (e.key === "Enter") launch(items[sel], e.ctrlKey && e.shiftKey);
           }}
         />
         <IconButton
@@ -102,6 +103,20 @@ export default function AppsCard() {
             <div key={a.id} className={`app-item ${i === sel ? "sel" : ""}`} onClick={() => launch(a)} onMouseEnter={() => setSel(i)} title={a.exePath ?? a.name}>
               <AppIcon id={a.id} size={30} fallback={a.source === "web" ? <Globe size={18} /> : undefined} />
               <span className="app-name">{a.name}</span>
+              {a.source !== "web" && (
+                <button
+                  type="button"
+                  className="admin-run"
+                  title="Запустить от имени администратора (Ctrl+Shift+Enter)"
+                  aria-label="Запустить от имени администратора"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    launch(a, true);
+                  }}
+                >
+                  <ShieldCheck size={12} />
+                </button>
+              )}
               <button
                 type="button"
                 className={`fav ${a.favorite ? "on" : ""}`}

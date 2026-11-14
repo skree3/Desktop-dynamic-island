@@ -13,6 +13,7 @@ pub mod dragdrop;
 pub mod foreground;
 pub mod gpu;
 pub mod headphones;
+pub mod keyboard;
 pub mod media;
 pub mod network;
 pub mod notifications;
@@ -23,6 +24,7 @@ pub mod quiet;
 pub mod session;
 pub mod shell;
 pub mod unread;
+pub mod vpn;
 pub mod window;
 
 use std::cell::Cell;

@@ -1,7 +1,7 @@
 // Компактное состояние: самая приоритетная активность (таймер, музыка, плагин) или часы.
 
 import { memo, useEffect } from "react";
-import { ArrowDownToLine, Battery, CalendarClock, Target, BatteryCharging, BellOff, Cpu, ExternalLink, Hourglass, Mic, MicOff, Music2, Phone, Puzzle, Rocket, Timer as TimerIcon } from "lucide-react";
+import { ArrowBigUp, ArrowDownToLine, Battery, CalendarClock, Target, BatteryCharging, BellOff, Cpu, ExternalLink, Hourglass, Keyboard, Mic, MicOff, Music2, Phone, Plane, Puzzle, Rocket, ShieldCheck, ShieldOff, Timer as TimerIcon } from "lucide-react";
 import { useNow } from "../hooks/common";
 import { currentLine, useLyrics } from "../hooks/useLyrics";
 import { ipc } from "../services/ipc";
@@ -214,23 +214,99 @@ function BatteryPulse({ activity }: { activity: Activity }) {
   );
 }
 
-/** Запуск приложения из острова: иконка «вылетает», от неё расходится кольцо, по острову проходит блик. */
+/** Запуск приложения из острова: иконка «вылетает», от неё расходится кольцо, по острову проходит блик.
+ *  Запуск от имени администратора — со щитом и подписью. */
 function LaunchPulse({ activity }: { activity: Activity }) {
+  const admin = activity.kind === "launch-admin";
   return (
-    <div className="compact-row launch-pulse" key={activity.updatedAt}>
+    <div className={`compact-row launch-pulse ${admin ? "admin" : ""}`} key={activity.updatedAt}>
       <span className="launch-icon">
         {activity.icon ? <img src={activity.icon} alt="" draggable={false} /> : <Rocket size={16} />}
         <i className="launch-ring" />
         {activity.icon && <img className="launch-ghost" src={activity.icon} alt="" draggable={false} />}
+        {admin && <ShieldCheck className="launch-shield" size={11} />}
       </span>
       <div className="compact-text">
         <span>{activity.title}</span>
+        {admin && <small>{activity.subtitle}</small>}
       </div>
       <span className="launch-dots" aria-label={activity.subtitle ?? undefined}>
         <i />
         <i />
         <i />
       </span>
+    </div>
+  );
+}
+
+/** Короткая вспышка: раскладка («RU»), Caps Lock, VPN. */
+function FlashCompact({ activity }: { activity: Activity }) {
+  if (activity.kind === "layout")
+    return (
+      <div className="compact-row flash flash-layout" key={activity.updatedAt}>
+        <span className="compact-icon"><Keyboard size={15} /></span>
+        <span className="flash-big">{activity.title}</span>
+      </div>
+    );
+  if (activity.kind === "caps") {
+    const on = activity.subtitle === "вкл.";
+    return (
+      <div className={`compact-row flash flash-caps ${on ? "on" : ""}`} key={activity.updatedAt}>
+        <span className="compact-icon caps-key"><ArrowBigUp size={16} /></span>
+        <div className="compact-text"><span>{activity.title}</span></div>
+        <span className="compact-value">{activity.subtitle}</span>
+      </div>
+    );
+  }
+  const connected = activity.title.includes("подключён");
+  return (
+    <div className={`compact-row flash flash-vpn ${connected ? "on" : ""}`} key={activity.updatedAt}>
+      <span className="compact-icon">{connected ? <ShieldCheck size={15} /> : <ShieldOff size={15} />}</span>
+      <div className="compact-text">
+        <span>{activity.title}</span>
+        {activity.subtitle && <small>{activity.subtitle}</small>}
+      </div>
+    </div>
+  );
+}
+
+/** Режим полёта: самолётик летит по острову, пока режим включён. */
+function AirplaneCompact() {
+  return (
+    <div className="compact-row airplane">
+      <span className="sky" aria-hidden>
+        <i className="cloud c1" />
+        <i className="cloud c2" />
+        <span className="plane"><Plane size={17} /></span>
+      </span>
+      <div className="compact-text"><span>Режим полёта</span></div>
+    </div>
+  );
+}
+
+/** Загрузка в Steam: игра, прогресс-кольцо, скорость и сколько осталось. */
+function SteamCompact({ activity }: { activity: Activity }) {
+  const p = Math.max(0, Math.min(1, activity.progress ?? 0));
+  const [speed, ...rest] = (activity.subtitle ?? "").split(" · ");
+  return (
+    <div className="compact-row steam-compact">
+      <span className="compact-icon steam-icon">
+        <svg viewBox="0 0 24 24" width={15} height={15} aria-hidden>
+          <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="1.6" />
+          <circle cx="15.5" cy="9" r="2.6" fill="none" stroke="currentColor" strokeWidth="1.6" />
+          <circle cx="8.5" cy="15.5" r="1.8" fill="currentColor" />
+          <path d="M9.8 14.8 13.6 10.6" stroke="currentColor" strokeWidth="1.6" />
+        </svg>
+      </span>
+      <div className="compact-text">
+        <span>{activity.title}</span>
+        <small>{rest.join(" · ") || speed}</small>
+      </div>
+      <span className="compact-value mono steam-speed">{rest.length ? speed : ""}</span>
+      <svg className="ring" viewBox="0 0 20 20" width={18} height={18} aria-label={`${Math.round(p * 100)}%`}>
+        <circle cx="10" cy="10" r="8" className="ring-bg" />
+        <circle cx="10" cy="10" r="8" className="ring-fg" strokeDasharray={`${p * 50.27} 50.27`} />
+      </svg>
     </div>
   );
 }
@@ -258,15 +334,20 @@ export function CompactView({ top }: { top: Activity | null }) {
   const queued = useIsland((s) => s.notification.queued);
   const musicInCompact = useApp((s) => s.settings?.music.showInCompact);
   const greeting = useIsland((s) => s.greeting);
+  const caps = useIsland((s) => s.kbd.caps);
+  const showCaps = useApp((s) => s.settings?.keyboard.caps !== false);
   let content;
   if (greeting) content = <Greeting text={greeting} />;
   else if (top?.id === "launch") content = <LaunchPulse activity={top} />;
+  else if (top?.id === "flash") content = <FlashCompact activity={top} />;
   else if (top?.id === "call") content = <CallCompact activity={top} />;
   else if (top?.id === "download") content = <DownloadCompact activity={top} />;
+  else if (top?.id === "steam") content = <SteamCompact activity={top} />;
   else if (top?.id === "battery") content = <BatteryPulse activity={top} />;
   else if (top?.id.startsWith("timer:")) content = <TimerCompact activity={top} />;
   else if (top?.kind === "music" && musicInCompact) content = <MusicCompact />;
   else if (top?.id === "pomodoro") content = <PomodoroCompact activity={top} />;
+  else if (top?.id === "airplane") content = <AirplaneCompact />;
   else if (top?.id === "calendar")
     content = (
       <div className="compact-row">
@@ -293,8 +374,9 @@ export function CompactView({ top }: { top: Activity | null }) {
     <div className="compact">
       {content}
       <PrivacyDots />
-      {(dnd || queued > 0) && (
+      {(dnd || queued > 0 || (caps && showCaps)) && (
         <div className="compact-badges">
+          {caps && showCaps && <ArrowBigUp size={13} className="caps-badge" aria-label="Caps Lock включён" />}
           {dnd && <BellOff size={12} aria-label="Не беспокоить" />}
           {queued > 0 && <span className="badge">+{queued}</span>}
         </div>

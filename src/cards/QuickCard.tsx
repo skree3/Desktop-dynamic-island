@@ -3,6 +3,7 @@
 
 import { useState, type ReactNode } from "react";
 import {
+  ArrowBigUp,
   BatteryCharging,
   BatteryFull,
   BatteryLow,
@@ -10,11 +11,14 @@ import {
   Bluetooth,
   BluetoothOff,
   Droplet,
+  Keyboard,
   Leaf,
   Plane,
   Power,
   RotateCw,
   Settings,
+  ShieldCheck,
+  ShieldOff,
   Sun,
   Volume2,
   VolumeX,
@@ -26,6 +30,7 @@ import { AppMixer, HeadphonesRow } from "../components/SoundExtras";
 import { useLoad, usePoll } from "../hooks/common";
 import { errorMessage, ipc } from "../services/ipc";
 import { useApp } from "../stores/app";
+import { useIsland } from "../stores/island";
 import type { QuickState } from "../types";
 import { hexToRgba } from "../utils/format";
 
@@ -64,12 +69,16 @@ export default function QuickCard() {
   const modules = useApp((s) => s.settings?.modules);
   const q = useLoad(() => ipc.quick());
   const bright = useLoad(() => (modules?.brightness ? ipc.brightness() : Promise.resolve(null)), [modules?.brightness]);
+  const vpnClient = useApp((s) => s.settings?.vpn.client ?? "auto");
+  const vpn = useLoad(() => (vpnClient === "none" ? Promise.resolve(null) : ipc.vpnStatus()), [vpnClient]);
+  const kbd = useIsland((s) => s.kbd);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<null | { action: "shutdown" | "reboot"; token: string }>(null);
 
   // Пока карточка открыта — обновляем состояние раз в 5 секунд (изменения извне).
   usePoll(() => q.reload(), 5000, !!q.data);
+  usePoll(() => vpn.reload(), 2500, !!vpn.data?.client);
 
   const act = async (key: string, fn: () => Promise<unknown>) => {
     setBusy(key);
@@ -114,12 +123,13 @@ export default function QuickCard() {
           />
         )}
         <Tile
-          icon={<Plane size={18} />}
+          icon={busy === "air" ? <Spinner /> : <Plane size={18} />}
           label="В самолёте"
           sub={s.airplane.known ? (s.airplane.on ? "Вкл." : "Выкл.") : "Недоступно"}
           on={s.airplane.on}
+          disabled={!!busy}
           title={s.airplane.note}
-          onClick={() => act("air", () => ipc.openSystemSettings("airplane"))}
+          onClick={() => act("air", () => (s.airplane.canToggle ? ipc.airplaneSet(!s.airplane.on) : ipc.openSystemSettings("airplane")))}
         />
         <Tile
           icon={busy === "saver" ? <Spinner /> : <Leaf size={18} />}
@@ -136,7 +146,46 @@ export default function QuickCard() {
           on={!!p?.charging}
           onClick={() => act("bat", () => ipc.openSystemSettings("power"))}
         />
-        <Tile icon={<Settings size={18} />} label="Параметры" sub="Системы" onClick={() => act("set", () => ipc.openSystemSettings("main"))} />
+        {vpn.data?.client ? (
+          <Tile
+            icon={busy === "vpn" ? <Spinner /> : vpn.data.connected ? <ShieldCheck size={18} /> : <ShieldOff size={18} />}
+            label={`VPN · ${vpn.data.name}`}
+            sub={!vpn.data.installed ? "Не найден" : vpn.data.connected ? "Подключён" : vpn.data.canControl ? "Отключён" : "Открыть"}
+            on={vpn.data.connected}
+            disabled={!!busy}
+            title={vpn.data.canControl ? "Подключение к серверу, выбранному в " + vpn.data.name : "Открывает " + vpn.data.name}
+            onClick={() =>
+              !vpn.data!.installed
+                ? ipc.openSettings("vpn")
+                : act("vpn", async () => {
+                    await ipc.vpnSet(!vpn.data!.connected);
+                    // Клиенту нужно пару секунд, чтобы поднять или убрать туннель.
+                    for (let i = 0; i < 8; i++) {
+                      await new Promise((r) => setTimeout(r, 600));
+                      const v = await vpn.reload();
+                      if (v && v.connected !== vpn.data!.connected) break;
+                    }
+                  })
+            }
+          />
+        ) : (
+          <Tile icon={<Settings size={18} />} label="Параметры" sub="Системы" onClick={() => act("set", () => ipc.openSystemSettings("main"))} />
+        )}
+        <Tile
+          icon={<Keyboard size={18} />}
+          label="Раскладка"
+          sub={kbd.layout ?? "—"}
+          title="Следующая раскладка в активном окне"
+          onClick={() => act("kbd", () => ipc.kbdNextLayout())}
+        />
+        <Tile
+          icon={<ArrowBigUp size={18} />}
+          label="Caps Lock"
+          sub={kbd.caps ? "Вкл." : "Выкл."}
+          on={kbd.caps}
+          onClick={() => act("caps", () => ipc.kbdCapsToggle())}
+        />
+        {vpn.data?.client && <Tile icon={<Settings size={18} />} label="Параметры" sub="Системы" onClick={() => act("set", () => ipc.openSystemSettings("main"))} />}
       </div>
 
       {modules?.volume && (

@@ -43,7 +43,7 @@ export function useLoad<T>(loader: () => Promise<T>, deps: unknown[] = []) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const mounted = useRef(true);
-  const reload = useCallback(async () => {
+  const reload = useCallback(async (): Promise<T | null> => {
     setLoading(true);
     try {
       const d = await loader();
@@ -51,8 +51,10 @@ export function useLoad<T>(loader: () => Promise<T>, deps: unknown[] = []) {
         setData(d);
         setError(null);
       }
+      return d;
     } catch (e) {
       if (mounted.current) setError(errorMessage(e));
+      return null;
     } finally {
       if (mounted.current) setLoading(false);
     }

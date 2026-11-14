@@ -169,6 +169,29 @@ pub fn icon(target: &LaunchTarget, _icon_hint: Option<&str>, size: u32) -> AppRe
     run_sta(move || icon_inner(path, size))
 }
 
+/// Запуск от имени администратора. Приложения из Microsoft Store так запустить нельзя.
+pub fn launch_admin(target: &LaunchTarget, exe_path: Option<&str>) -> AppResult<()> {
+    let exe = match (target, exe_path) {
+        (LaunchTarget::Exe { path, args }, _) => Some((path.clone(), args.clone())),
+        (_, Some(p)) if p.to_lowercase().ends_with(".exe") || p.to_lowercase().ends_with(".lnk") => Some((p.to_string(), vec![])),
+        _ => None,
+    };
+    if let Some((path, args)) = exe {
+        let p = std::path::Path::new(&path);
+        if !p.is_file() {
+            return Err(AppError::NotFound(format!("файл не найден: {path}")));
+        }
+        let dir = p.parent().map(|d| d.to_string_lossy().to_string());
+        let joined = args.iter().map(|a| if a.contains(' ') { format!("\"{a}\"") } else { a.clone() }).collect::<Vec<_>>().join(" ");
+        return shell::shell_exec("runas", &path, if joined.is_empty() { None } else { Some(&joined) }, dir.as_deref());
+    }
+    match target {
+        // Ярлыки классических программ в меню «Пуск» принимают «runas»; приложения Store — нет.
+        LaunchTarget::AppsFolder { id } if !id.contains('!') => shell::shell_exec("runas", &format!("shell:AppsFolder\\{id}"), None, None),
+        _ => Err(AppError::unsupported("это приложение нельзя запустить от имени администратора")),
+    }
+}
+
 pub fn launch(target: &LaunchTarget) -> AppResult<()> {
     match target {
         LaunchTarget::AppsFolder { id } => shell::shell_open(&format!("shell:AppsFolder\\{id}"), None, None),

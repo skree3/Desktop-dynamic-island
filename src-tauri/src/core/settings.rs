@@ -62,6 +62,8 @@ pub struct AppearanceSettings {
     pub language: String,
     /// Полноэкранное видео/программа — остров сжимается в тонкую полоску.
     pub fullscreen_strip: bool,
+    /// Шрифт интерфейса: system | встроенный id | custom:<файл в data/fonts>.
+    pub font: String,
 }
 impl Default for AppearanceSettings {
     fn default() -> Self {
@@ -83,6 +85,7 @@ impl Default for AppearanceSettings {
             wallpaper_blur: 12,
             language: "ru".into(),
             fullscreen_strip: true,
+            font: "system".into(),
         }
     }
 }
@@ -146,6 +149,8 @@ pub struct ModulesSettings {
     pub privacy: bool,
     /// Загрузки браузеров в острове.
     pub downloads: bool,
+    /// Загрузки Steam в острове.
+    pub steam: bool,
 }
 impl Default for ModulesSettings {
     fn default() -> Self {
@@ -169,6 +174,7 @@ impl Default for ModulesSettings {
             battery: true,
             privacy: true,
             downloads: true,
+            steam: true,
         }
     }
 }
@@ -194,6 +200,7 @@ impl ModulesSettings {
             "battery" => self.battery,
             "privacy" => self.privacy,
             "downloads" => self.downloads,
+            "steam" => self.steam,
             _ => false,
         }
     }
@@ -246,6 +253,80 @@ impl Default for NotificationSettings {
             dnd_allow: vec![],
         }
     }
+}
+
+/// Встроенные шрифты интерфейса (id из фронтенда).
+pub const BUILTIN_FONTS: &[&str] = &["system", "inter", "manrope", "onest", "golos", "montserrat", "rubik", "nunito", "plex", "comfortaa"];
+/// Встроенные звуки уведомлений и таймера.
+pub const NOTIFICATION_SOUNDS: &[&str] = &["glass", "drop", "pop", "bell", "chord", "pluck", "bubble", "soft"];
+pub const TIMER_SOUNDS: &[&str] = &["radar", "beacon", "classic", "chimes", "rise", "marimba", "pulse", "morning"];
+
+/// Звуки острова: уведомления и окончание таймера настраиваются независимо.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default, rename_all = "camelCase")]
+pub struct SoundSettings {
+    /// id встроенного звука или custom:notification.<ext>.
+    pub notification: String,
+    pub notification_volume: f32,
+    /// Звук по окончании таймера.
+    pub timer_enabled: bool,
+    pub timer: String,
+    pub timer_volume: f32,
+    /// Сколько секунд звучит таймер; 0 — пока не остановят.
+    pub timer_limit_secs: u32,
+}
+impl Default for SoundSettings {
+    fn default() -> Self {
+        Self {
+            notification: "glass".into(),
+            notification_volume: 0.6,
+            timer_enabled: true,
+            timer: "radar".into(),
+            timer_volume: 0.8,
+            timer_limit_secs: 60,
+        }
+    }
+}
+
+/// Индикаторы клавиатуры в острове.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default, rename_all = "camelCase")]
+pub struct KeyboardSettings {
+    /// Показывать смену раскладки.
+    pub layout: bool,
+    /// Показывать Caps Lock.
+    pub caps: bool,
+}
+impl Default for KeyboardSettings {
+    fn default() -> Self {
+        Self { layout: true, caps: true }
+    }
+}
+
+/// VPN-клиент для кнопки в центре управления.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default, rename_all = "camelCase")]
+pub struct VpnSettings {
+    /// auto | happ | incy | none
+    pub client: String,
+    /// Свой путь к программе (если не нашлась сама).
+    pub path: String,
+    /// Коротко показывать в острове подключение и отключение.
+    pub notify: bool,
+}
+impl Default for VpnSettings {
+    fn default() -> Self {
+        Self { client: "auto".into(), path: String::new(), notify: true }
+    }
+}
+
+fn valid_custom(name: &str, prefix: &str, exts: &[&str]) -> bool {
+    let Some(file) = name.strip_prefix("custom:") else { return false };
+    file.starts_with(prefix)
+        && file.len() < 120
+        && !file.contains(['/', '\\', ':'])
+        && !file.contains("..")
+        && exts.iter().any(|e| file.to_ascii_lowercase().ends_with(&format!(".{e}")))
 }
 
 /// Календарь по ICS-ссылкам.
@@ -492,6 +573,9 @@ pub struct Settings {
     pub calendar: CalendarSettings,
     pub pomodoro: PomodoroSettings,
     pub speech: SpeechSettings,
+    pub sounds: SoundSettings,
+    pub keyboard: KeyboardSettings,
+    pub vpn: VpnSettings,
 }
 
 pub const SECTIONS: &[&str] = &[
@@ -513,6 +597,9 @@ pub const SECTIONS: &[&str] = &[
     "calendar",
     "pomodoro",
     "speech",
+    "sounds",
+    "keyboard",
+    "vpn",
 ];
 
 /// Разделы, которые сохраняются в профиль.
@@ -575,6 +662,23 @@ impl Settings {
         if !matches!(self.position.style.as_str(), "edge" | "float") {
             self.position.style = "float".into();
         }
+        if !BUILTIN_FONTS.contains(&a.font.as_str()) && !valid_custom(&a.font, "", &["ttf", "otf"]) {
+            a.font = "system".into();
+        }
+        let snd = &mut self.sounds;
+        if !NOTIFICATION_SOUNDS.contains(&snd.notification.as_str()) && !valid_custom(&snd.notification, "notification.", &["wav", "mp3", "ogg"]) {
+            snd.notification = "glass".into();
+        }
+        if !TIMER_SOUNDS.contains(&snd.timer.as_str()) && !valid_custom(&snd.timer, "timer.", &["wav", "mp3", "ogg"]) {
+            snd.timer = "radar".into();
+        }
+        snd.notification_volume = if snd.notification_volume.is_finite() { snd.notification_volume.clamp(0.0, 1.0) } else { 0.6 };
+        snd.timer_volume = if snd.timer_volume.is_finite() { snd.timer_volume.clamp(0.0, 1.0) } else { 0.8 };
+        snd.timer_limit_secs = snd.timer_limit_secs.min(600);
+        if !matches!(self.vpn.client.as_str(), "auto" | "happ" | "incy" | "none") {
+            self.vpn.client = "auto".into();
+        }
+        self.vpn.path = self.vpn.path.trim().chars().filter(|c| !c.is_control()).take(1024).collect();
         if !matches!(self.speech.lang.as_str(), "ru" | "en") {
             self.speech.lang = "ru".into();
         }
@@ -716,6 +820,25 @@ mod tests {
         assert_eq!(s.appearance.mode, "system");
         assert!(s.apply_section("unknown", serde_json::json!({})).is_err());
         assert!(s.apply_section("appearance", serde_json::json!({ "radius": "abc" })).is_err());
+    }
+
+    #[test]
+    fn sanitize_fonts_and_sounds() {
+        let mut s = Settings::default();
+        s.appearance.font = "custom:../evil.ttf".into();
+        s.sounds.notification = "custom:timer.mp3".into();
+        s.sounds.timer = "custom:timer.wav".into();
+        s.sounds.timer_volume = 7.0;
+        s.vpn.client = "openvpn".into();
+        s.sanitize();
+        assert_eq!(s.appearance.font, "system");
+        assert_eq!(s.sounds.notification, "glass");
+        assert_eq!(s.sounds.timer, "custom:timer.wav");
+        assert_eq!(s.sounds.timer_volume, 1.0);
+        assert_eq!(s.vpn.client, "auto");
+        s.appearance.font = "custom:My Font.otf".into();
+        s.sanitize();
+        assert_eq!(s.appearance.font, "custom:My Font.otf");
     }
 
     #[test]

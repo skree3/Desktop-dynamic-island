@@ -222,6 +222,38 @@ fn spawn_detached(program: &str, args: &[String], dir: Option<&str>) -> AppResul
     Ok(())
 }
 
+/// Запуск с правами root через pkexec (система покажет окно ввода пароля).
+pub fn launch_admin(target: &LaunchTarget, exe_path: Option<&str>) -> AppResult<()> {
+    let (program, args): (String, Vec<String>) = match target {
+        LaunchTarget::Exe { path, args } => (path.clone(), args.clone()),
+        LaunchTarget::Desktop { path } => {
+            let text = std::fs::read_to_string(path).map_err(|_| AppError::NotFound("desktop-файл не найден".into()))?;
+            let map = parse_desktop(&text);
+            let exec = map.get("Exec").ok_or_else(|| AppError::invalid("в desktop-файле нет Exec"))?;
+            let name = map.get("Name").cloned().unwrap_or_default();
+            let args = expand_field_codes(split_exec(exec), &name, map.get("Icon").map(|s| s.as_str()), path);
+            let (p, rest) = args.split_first().ok_or_else(|| AppError::invalid("пустая команда Exec"))?;
+            (p.clone(), rest.to_vec())
+        }
+        _ => match exe_path {
+            Some(p) => (p.to_string(), vec![]),
+            None => return Err(AppError::unsupported("это приложение нельзя запустить от имени администратора")),
+        },
+    };
+    if !super::command_exists("pkexec") {
+        return Err(AppError::unsupported("нужен pkexec (polkit)"));
+    }
+    let mut all = vec!["env".to_string()];
+    for var in ["DISPLAY", "XAUTHORITY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR"] {
+        if let Ok(v) = std::env::var(var) {
+            all.push(format!("{var}={v}"));
+        }
+    }
+    all.push(program);
+    all.extend(args);
+    spawn_detached("pkexec", &all, None)
+}
+
 pub fn launch(target: &LaunchTarget) -> AppResult<()> {
     match target {
         LaunchTarget::Desktop { path } => {

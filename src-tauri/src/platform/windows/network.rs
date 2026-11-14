@@ -1,6 +1,7 @@
 //! Wi-Fi и радиомодули: Windows.Devices.Radios (вкл/выкл с запросом доступа)
 //! и Windows.Networking.Connectivity (текущее подключение / SSID).
-//! Переключение режима «в самолёте» системного API не имеет.
+//! Режим «в самолёте» — недокументированный COM RadioManagementAPI (тот же,
+//! что у переключателя в центре уведомлений); работает без прав администратора.
 
 use windows::Devices::Radios::{Radio, RadioAccessStatus, RadioKind, RadioState};
 use windows::Networking::Connectivity::{NetworkConnectivityLevel, NetworkInformation};
@@ -94,7 +95,64 @@ pub fn set_wifi(on: bool) -> AppResult<()> {
     set_radio(RadioKind::WiFi, on)
 }
 
+#[allow(non_snake_case, dead_code)]
+mod rm {
+    use windows::core::{interface, IUnknown, IUnknown_Vtbl, GUID, HRESULT};
+
+    #[interface("db3afbfb-08e6-46c6-aa70-bf9a34c30ab7")]
+    pub unsafe trait IRadioManager: IUnknown {
+        fn IsRMSupported(&self, supported: *mut i32) -> HRESULT;
+        fn GetUIRadioInstances(&self, out: *mut *mut core::ffi::c_void) -> HRESULT;
+        fn GetSystemRadioState(&self, enabled: *mut i32, p2: *mut i32, reason: *mut i32) -> HRESULT;
+        fn SetSystemRadioState(&self, enabled: i32) -> HRESULT;
+        fn Refresh(&self) -> HRESULT;
+        fn OnHardwareSliderChange(&self, a: i32, b: i32) -> HRESULT;
+    }
+
+    pub const CLSID_RADIO_MANAGEMENT: GUID = GUID::from_u128(0x581333f6_28db_41be_bc7a_ff201f12f3f6);
+
+    fn manager() -> Option<IRadioManager> {
+        use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, CLSCTX_LOCAL_SERVER, COINIT_MULTITHREADED};
+        unsafe {
+            let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+            CoCreateInstance(&CLSID_RADIO_MANAGEMENT, None, CLSCTX_INPROC_SERVER | CLSCTX_LOCAL_SERVER).ok()
+        }
+    }
+
+    /// Some(true) — режим «в самолёте» включён.
+    pub fn get() -> Option<bool> {
+        let m = manager()?;
+        let (mut en, mut p2, mut reason) = (0i32, 0i32, 0i32);
+        unsafe { m.GetSystemRadioState(&mut en, &mut p2, &mut reason).ok().ok()? };
+        Some(en == 0)
+    }
+
+    pub fn set(on: bool) -> bool {
+        manager().map(|m| unsafe { m.SetSystemRadioState(if on { 0 } else { 1 }).is_ok() }).unwrap_or(false)
+    }
+}
+
+/// COM-вызовы — в отдельном MTA-потоке (вызывающий поток может быть STA).
+fn on_mta<R: Send + 'static>(f: impl FnOnce() -> R + Send + 'static) -> Option<R> {
+    std::thread::spawn(f).join().ok()
+}
+
+pub fn airplane_on() -> Option<bool> {
+    on_mta(rm::get).flatten()
+}
+
+pub fn set_airplane(on: bool) -> AppResult<()> {
+    if on_mta(move || rm::set(on)).unwrap_or(false) {
+        Ok(())
+    } else {
+        Err(AppError::unsupported("Windows не дал переключить режим «в самолёте». Откройте «Параметры → Сеть»."))
+    }
+}
+
 pub fn airplane_state() -> AirplaneState {
+    if let Some(on) = airplane_on() {
+        return AirplaneState { known: true, on, can_toggle: true, note: "Режим «в самолёте» Windows".into() };
+    }
     match radios() {
         Ok(list) if !list.is_empty() => {
             let all_off = list.iter().all(|r| r.State().map(|s| s != RadioState::On).unwrap_or(true));

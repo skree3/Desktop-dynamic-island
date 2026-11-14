@@ -17,6 +17,7 @@
   --font: "Segoe UI Variable Text", "Segoe UI", "Inter", "Cantarell", "Ubuntu", system-ui, sans-serif;
   color-scheme: dark;
   font-family: var(--font);
+  font-size-adjust: var(--font-adjust, none);
   font-size: 13px;
   color: var(--text);
   -webkit-font-smoothing: antialiased;

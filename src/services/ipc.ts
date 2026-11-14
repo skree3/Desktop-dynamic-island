@@ -62,6 +62,19 @@ export const ipc = {
   wallpaperPick: () => call<string | null>("wallpaper_pick"),
   wallpaperClear: () => call<void>("wallpaper_clear"),
   wallpaperData: () => call<string | null>("wallpaper_data"),
+  fontsList: () => call<T.FontFile[]>("fonts_list"),
+  fontPick: () => call<T.FontFile | null>("font_pick"),
+  fontData: (file: string) => call<string>("font_data", { file }),
+  fontRemove: (file: string) => call<void>("font_remove", { file }),
+  soundPick: (kind: "notification" | "timer") => call<string | null>("sound_pick", { kind }),
+  soundData: (file: string) => call<string>("sound_data", { file }),
+  kbdState: () => call<T.KbdState>("kbd_state"),
+  kbdNextLayout: () => call<void>("kbd_next_layout"),
+  kbdCapsToggle: () => call<void>("kbd_caps_toggle"),
+  airplaneSet: (on: boolean) => call<void>("airplane_set", { on }),
+  vpnStatus: () => call<T.VpnStatus>("vpn_status"),
+  vpnSet: (on: boolean) => call<T.VpnStatus>("vpn_set", { on }),
+  vpnPickPath: () => call<string | null>("vpn_pick_path"),
   hotkeys: () => call<T.HotkeyStatus[]>("hotkeys_list"),
   hotkeySet: (action: string, accelerator: string, enabled: boolean) =>
     call<T.HotkeyStatus[]>("hotkey_set", { action, accelerator, enabled }),
@@ -188,6 +201,7 @@ export const ipc = {
   appsSearch: (query: string, limit?: number) => call<T.AppEntry[]>("apps_search", { query, limit: limit ?? null }),
   appsIcon: (id: string) => call<string | null>("apps_icon", { id }),
   appsLaunch: (id: string) => call<void>("apps_launch", { id }),
+  appsLaunchAdmin: (id: string) => call<void>("apps_launch_admin", { id }),
   appsRefresh: () => call<number>("apps_refresh"),
   appsSetFavorite: (id: string, favorite: boolean) => call<void>("apps_set_favorite", { id, favorite }),
   appsSetHidden: (id: string, hidden: boolean) => call<void>("apps_set_hidden", { id, hidden }),
@@ -231,6 +245,7 @@ export const events = {
   NOTIFICATIONS_STATUS: "notifications://status",
   MONITORS_CHANGED: "monitors://changed",
   SETTINGS_NAVIGATE: "settings://navigate",
+  KBD: "island://kbd",
 } as const;
 
 export function on<P>(event: string, handler: (payload: P) => void): Promise<UnlistenFn> {

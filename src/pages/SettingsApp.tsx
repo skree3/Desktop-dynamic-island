@@ -24,6 +24,7 @@ const system = () => import("../settings/sections/system");
 const phone = () => import("../settings/sections/phone");
 const calendar = () => import("../settings/sections/calendar");
 const speech = () => import("../settings/sections/speech");
+const extras = () => import("../settings/sections/extras");
 
 /** Значок группы «Остров» — сама пилюля. */
 function IslandIcon({ size = 18 }: { size?: number }) {
@@ -47,6 +48,8 @@ export const GROUPS: GroupDef[] = [
       { id: "position", title: "Положение", component: S(general, "PositionSection") },
       { id: "cards", title: "Карточки", component: S(modules, "CardsSection") },
       { id: "themes", title: "Темы", component: S(personal, "ThemesSection") },
+      { id: "fonts", title: "Шрифты", component: S(extras, "FontsSection") },
+      { id: "indicators", title: "Индикаторы", component: S(extras, "IndicatorsSection") },
       { id: "pomodoro", title: "Помодоро", component: S(calendar, "PomodoroSection") },
     ],
   },
@@ -56,6 +59,7 @@ export const GROUPS: GroupDef[] = [
     icon: Bell,
     sections: [
       { id: "notifications", title: "Уведомления", component: S(modules, "NotificationsSection") },
+      { id: "sounds", title: "Звуки", component: S(extras, "SoundsSection") },
       { id: "music", title: "Музыка", component: S(modules, "MusicSection") },
       { id: "clipboard", title: "Буфер обмена", component: S(modules, "ClipboardSection") },
     ],
@@ -66,6 +70,7 @@ export const GROUPS: GroupDef[] = [
     icon: Plug,
     sections: [
       { id: "phone", title: "Телефон", component: S(phone, "PhoneSection") },
+      { id: "vpn", title: "VPN", component: S(extras, "VpnSection") },
       { id: "calendar", title: "Календарь", component: S(calendar, "CalendarSection") },
       { id: "integrations", title: "Интеграции", component: S(integrations, "IntegrationsSection") },
       { id: "plugins", title: "Плагины", component: S(plugins, "PluginsSection") },
@@ -93,6 +98,7 @@ export const GROUPS: GroupDef[] = [
       { id: "security", title: "Безопасность", component: S(system, "SecuritySection") },
       { id: "logs", title: "Журнал событий", component: S(system, "LogsSection") },
       { id: "about", title: "О программе", component: S(system, "AboutSection") },
+      { id: "author", title: "Об авторе", component: S(extras, "AuthorSection") },
     ],
   },
 ];

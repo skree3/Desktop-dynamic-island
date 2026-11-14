@@ -13,6 +13,36 @@ export interface Placement {
   top: number;
 }
 
+export interface SoundSettings {
+  notification: string;
+  notificationVolume: number;
+  timerEnabled: boolean;
+  timer: string;
+  timerVolume: number;
+  /** 0 — звучит, пока не остановят. */
+  timerLimitSecs: number;
+}
+
+export interface KbdState {
+  layout: string | null;
+  caps: boolean;
+}
+
+export interface VpnStatus {
+  client: "" | "happ" | "incy";
+  name: string;
+  installed: boolean;
+  connected: boolean;
+  canControl: boolean;
+  path: string | null;
+}
+
+export interface FontFile {
+  file: string;
+  family: string;
+  size: number;
+}
+
 export interface PhoneSettings {
   enabled: boolean;
   deviceName: string;
@@ -43,6 +73,7 @@ export interface Settings {
     wallpaperBlur: number;
     language: "ru" | "en";
     fullscreenStrip: boolean;
+    font: string;
   };
   position: { monitor: string | null; placements: Record<string, Placement>; locked: boolean; style: "edge" | "float" };
   modules: Record<ModuleId, boolean>;
@@ -64,6 +95,9 @@ export interface Settings {
   phone: PhoneSettings;
   calendar: { urls: string[]; remindMinutes: number };
   speech: { lang: "ru" | "en"; auto: boolean };
+  sounds: SoundSettings;
+  keyboard: { layout: boolean; caps: boolean };
+  vpn: { client: "auto" | "happ" | "incy" | "none"; path: string; notify: boolean };
   pomodoro: { focusMin: number; shortMin: number; longMin: number; cycles: number; dndDuringFocus: boolean };
   systemMonitor: { intervalMs: number; showInCompact: boolean; historyPoints: number };
   clipboard: {
@@ -112,7 +146,8 @@ export type ModuleId =
   | "shelf"
   | "battery"
   | "privacy"
-  | "downloads";
+  | "downloads"
+  | "steam";
 
 export interface AppRule {
   app: string;

@@ -9,8 +9,13 @@ use crate::core::error::{AppError, AppResult};
 use crate::platform::types::SettingsPage;
 
 pub fn shell_open(file: &str, args: Option<&str>, dir: Option<&str>) -> AppResult<()> {
+    shell_exec("open", file, args, dir)
+}
+
+/// ShellExecute с глаголом: «open» или «runas» (запуск от имени администратора — Windows покажет запрос UAC).
+pub fn shell_exec(verb: &str, file: &str, args: Option<&str>, dir: Option<&str>) -> AppResult<()> {
     ensure_com();
-    let op = wide("open");
+    let op = wide(verb);
     let f = wide(file);
     let a = args.map(wide);
     let d = dir.map(wide);
@@ -28,6 +33,8 @@ pub fn shell_open(file: &str, args: Option<&str>, dir: Option<&str>) -> AppResul
     let code = h.0 as isize;
     if code > 32 {
         Ok(())
+    } else if code == 5 && verb == "runas" {
+        Err(AppError::PermissionDenied("запуск от имени администратора отменён".into()))
     } else if code == 5 {
         Err(AppError::PermissionDenied("отказано в доступе при запуске".into()))
     } else if code == 2 || code == 3 {

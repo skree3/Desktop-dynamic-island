@@ -1,6 +1,6 @@
 //! Wi-Fi через NetworkManager (системная шина). Включение/выключение
 //! проходит через polkit — система сама запросит разрешение при необходимости.
-//! Режим «в самолёте» читается из rfkill (sysfs), переключается в настройках ОС.
+//! Режим «в самолёте» читается из rfkill (sysfs) и переключается утилитой rfkill.
 
 use zbus::zvariant::OwnedObjectPath;
 
@@ -72,11 +72,21 @@ pub fn airplane_state() -> AirplaneState {
     AirplaneState {
         known: any,
         on: any && all_blocked,
-        can_toggle: false,
-        note: if any {
-            "Состояние определяется через rfkill. Переключение — в настройках окружения рабочего стола.".into()
-        } else {
-            "Радиомодули rfkill не найдены".into()
-        },
+        can_toggle: any,
+        note: if any { "rfkill".into() } else { "Радиомодули rfkill не найдены".into() },
+    }
+}
+
+pub fn airplane_on() -> Option<bool> {
+    let st = airplane_state();
+    st.known.then_some(st.on)
+}
+
+pub fn set_airplane(on: bool) -> AppResult<()> {
+    let out = std::process::Command::new("rfkill").arg(if on { "block" } else { "unblock" }).arg("all").output();
+    match out {
+        Ok(o) if o.status.success() => Ok(()),
+        Ok(o) => Err(AppError::PermissionDenied(format!("rfkill: {}", String::from_utf8_lossy(&o.stderr).trim()))),
+        Err(_) => Err(AppError::unsupported("не найдена утилита rfkill (пакет rfkill)")),
     }
 }

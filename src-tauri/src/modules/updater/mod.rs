@@ -43,8 +43,36 @@ pub struct UpdaterModule {
     task: TaskSlot,
     last: Mutex<Option<UpdateInfo>>,
     assets: Mutex<Vec<(String, String)>>,
-    notified: Mutex<Option<String>>,
+    /// Какая версия и когда показана в острове («Позже» — напомнить через сутки).
+    notified: Mutex<Option<(String, i64)>>,
 }
+
+/// Краткое описание изменений из текста релиза: первые пункты списка без разметки.
+pub fn summary(notes: &str, max_items: usize) -> String {
+    let items: Vec<String> = notes
+        .lines()
+        .map(|l| l.trim())
+        .filter_map(|l| l.strip_prefix("- ").or_else(|| l.strip_prefix("* ")).or_else(|| l.strip_prefix("• ")))
+        .map(|l| l.replace("**", "").replace('`', "").trim().trim_end_matches('.').to_string())
+        .filter(|l| !l.is_empty())
+        .take(max_items)
+        .collect();
+    if !items.is_empty() {
+        return items.join(", ");
+    }
+    notes
+        .lines()
+        .map(|l| l.trim().trim_start_matches('#').trim())
+        .find(|l| !l.is_empty() && !l.contains("Changelog") && !l.contains("What's Changed") && !l.starts_with("http"))
+        .unwrap_or("")
+        .replace("**", "")
+        .chars()
+        .take(120)
+        .collect()
+}
+
+const REMIND_AFTER_MS: i64 = 24 * 3600 * 1000;
+const CHECK_EVERY: Duration = Duration::from_secs(3 * 3600);
 
 fn agent() -> ureq::Agent {
     ureq::AgentBuilder::new().timeout_connect(Duration::from_secs(10)).timeout(Duration::from_secs(600)).build()
@@ -198,16 +226,22 @@ impl UpdaterModule {
         let _ = app;
         let st = st.clone();
         self.task.start(async move {
-            tokio::time::sleep(Duration::from_secs(30)).await;
+            tokio::time::sleep(Duration::from_secs(15)).await;
             loop {
                 let st2 = st.clone();
                 match tauri::async_runtime::spawn_blocking(move || st2.updater.check_blocking()).await {
                     Ok(Ok(info)) if info.available => {
                         let latest = info.latest.clone().unwrap_or_default();
+                        let now = crate::database::now_ms();
                         let mut notified = st.updater.notified.lock().unwrap_or_else(|p| p.into_inner());
-                        if notified.as_deref() != Some(latest.as_str()) {
-                            *notified = Some(latest.clone());
+                        let due = match notified.as_ref() {
+                            Some((v, at)) => v != &latest || now - at >= REMIND_AFTER_MS,
+                            None => true,
+                        };
+                        if due {
+                            *notified = Some((latest.clone(), now));
                             drop(notified);
+                            let changes = summary(&info.notes, 3);
                             st.log.info(category::APP, "updater", format!("доступна версия {latest}"));
                             st.events.push(IslandNotification { stack: Vec::new(), count: 1,
                                 id: uuid::Uuid::new_v4().to_string(),
@@ -215,8 +249,8 @@ impl UpdaterModule {
                                 source: "updater".into(),
                                 app_name: "Desktop Island".into(),
                                 icon: None,
-                                title: format!("Доступна версия {latest}"),
-                                body: "Нажмите «Обновить», чтобы установить".into(),
+                                title: format!("Обновление {} → {latest}", info.current),
+                                body: if changes.is_empty() { "Нажмите «Обновить», чтобы установить".into() } else { changes },
                                 priority: Priority::Normal,
                                 timestamp: crate::database::now_ms(),
                                 actions: vec![
@@ -224,16 +258,33 @@ impl UpdaterModule {
                                     NotificationAction { id: "dismiss".into(), label: "Позже".into() },
                                 ],
                                 open_target: None,
-                                duration_ms: 12_000,
+                                duration_ms: 30_000,
                             });
                         }
                     }
                     Ok(Err(e)) => tracing::debug!(error = %e, "проверка обновлений"),
                     _ => {}
                 }
-                tokio::time::sleep(Duration::from_secs(6 * 3600)).await;
+                tokio::time::sleep(CHECK_EVERY).await;
             }
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn release_summary() {
+        let notes = "## Что нового
+
+- **Шрифты**: 10 встроенных.
+- Звуки уведомлений и таймера
+- Загрузки `Steam`
+- Ещё";
+        assert_eq!(super::summary(notes, 3), "Шрифты: 10 встроенных, Звуки уведомлений и таймера, Загрузки Steam");
+        assert_eq!(super::summary("Исправления ошибок", 3), "Исправления ошибок");
+        assert_eq!(super::summary("• Раз
+• Два", 3), "Раз, Два");
     }
 }
 

@@ -208,6 +208,9 @@ impl TimersModule {
         if due.is_empty() {
             return;
         }
+        // Пока звучит сигнал таймера, уведомление не исчезает: «Закрыть» — остановить звук.
+        let snd = st.settings().sounds;
+        let duration_ms = if snd.timer_enabled && snd.timer_limit_secs == 0 { 30 * 60_000 } else { (snd.timer_limit_secs as u64 * 1000).max(15_000) };
         for mut t in due {
             t.state = "finished".into();
             t.elapsed_ms = t.duration_ms;
@@ -228,7 +231,7 @@ impl TimersModule {
                     NotificationAction { id: "dismiss".into(), label: "Закрыть".into() },
                 ],
                 open_target: None,
-                duration_ms: 15_000,
+                duration_ms,
             });
         }
         self.changed(st);

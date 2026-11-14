@@ -1,6 +1,6 @@
 [package]
 name = "desktop-island"
-version = "1.0.0"
+version = "1.1.0"
 description = "Desktop Island вЂ” РёРЅС‚РµСЂР°РєС‚РёРІРЅР°СЏ СЃРёСЃС‚РµРјРЅР°СЏ РїР°РЅРµР»СЊ РґР»СЏ Windows Рё Linux"
 edition = "2021"
 rust-version = "1.80"
@@ -70,6 +70,10 @@ windows = { version = "0.61", features = [
   "ApplicationModel",
   "ApplicationModel_DataTransfer",
   "Win32_Foundation",
+  "Win32_Globalization",
+  "Win32_NetworkManagement_IpHelper",
+  "Win32_NetworkManagement_Ndis",
+  "Win32_Networking_WinSock",
   "Win32_System_Com",
   "Win32_System_Com_StructuredStorage",
   "Win32_System_Variant",
