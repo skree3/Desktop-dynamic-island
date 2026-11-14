@@ -1,7 +1,7 @@
 // Компактное состояние: самая приоритетная активность (таймер, музыка, плагин) или часы.
 
 import { memo, useEffect } from "react";
-import { ArrowBigUp, ArrowDownToLine, Battery, CalendarClock, Target, BatteryCharging, BellOff, Cpu, ExternalLink, Hourglass, Keyboard, Mic, MicOff, Music2, Phone, Plane, Puzzle, Rocket, ShieldCheck, ShieldOff, Timer as TimerIcon } from "lucide-react";
+import { ArrowDownToLine, Battery, CalendarClock, Target, BatteryCharging, BellOff, Cpu, ExternalLink, Hourglass, Mic, MicOff, Music2, Phone, Plane, Puzzle, Rocket, ShieldCheck, ShieldOff, Timer as TimerIcon } from "lucide-react";
 import { useNow } from "../hooks/common";
 import { currentLine, useLyrics } from "../hooks/useLyrics";
 import { ipc } from "../services/ipc";
@@ -239,25 +239,8 @@ function LaunchPulse({ activity }: { activity: Activity }) {
   );
 }
 
-/** Короткая вспышка: раскладка («RU»), Caps Lock, VPN. */
+/** Короткая вспышка: подключение и отключение VPN. */
 function FlashCompact({ activity }: { activity: Activity }) {
-  if (activity.kind === "layout")
-    return (
-      <div className="compact-row flash flash-layout" key={activity.updatedAt}>
-        <span className="compact-icon"><Keyboard size={15} /></span>
-        <span className="flash-big">{activity.title}</span>
-      </div>
-    );
-  if (activity.kind === "caps") {
-    const on = activity.subtitle === "вкл.";
-    return (
-      <div className={`compact-row flash flash-caps ${on ? "on" : ""}`} key={activity.updatedAt}>
-        <span className="compact-icon caps-key"><ArrowBigUp size={16} /></span>
-        <div className="compact-text"><span>{activity.title}</span></div>
-        <span className="compact-value">{activity.subtitle}</span>
-      </div>
-    );
-  }
   const connected = activity.title.includes("подключён");
   return (
     <div className={`compact-row flash flash-vpn ${connected ? "on" : ""}`} key={activity.updatedAt}>
@@ -334,8 +317,6 @@ export function CompactView({ top }: { top: Activity | null }) {
   const queued = useIsland((s) => s.notification.queued);
   const musicInCompact = useApp((s) => s.settings?.music.showInCompact);
   const greeting = useIsland((s) => s.greeting);
-  const caps = useIsland((s) => s.kbd.caps);
-  const showCaps = useApp((s) => s.settings?.keyboard.caps !== false);
   let content;
   if (greeting) content = <Greeting text={greeting} />;
   else if (top?.id === "launch") content = <LaunchPulse activity={top} />;
@@ -374,9 +355,8 @@ export function CompactView({ top }: { top: Activity | null }) {
     <div className="compact">
       {content}
       <PrivacyDots />
-      {(dnd || queued > 0 || (caps && showCaps)) && (
+      {(dnd || queued > 0) && (
         <div className="compact-badges">
-          {caps && showCaps && <ArrowBigUp size={13} className="caps-badge" aria-label="Caps Lock включён" />}
           {dnd && <BellOff size={12} aria-label="Не беспокоить" />}
           {queued > 0 && <span className="badge">+{queued}</span>}
         </div>

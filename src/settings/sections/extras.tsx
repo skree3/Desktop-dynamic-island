@@ -307,10 +307,10 @@ export function IndicatorsSection() {
   return (
     <Page title="Индикаторы">
       <Group>
-        <Field label="Смена раскладки" description="Остров коротко показывает RU, EN и другие">
+        <Field label="Смена раскладки" description="Короткое уведомление без звука: RU, EN и другие">
           <Toggle checked={k.layout} onChange={(layout) => update("keyboard", { layout }).catch(() => {})} />
         </Field>
-        <Field label="Caps Lock" description="Вспышка при переключении и значок, пока включён">
+        <Field label="Caps Lock" description="Короткое уведомление без звука при включении и выключении">
           <Toggle checked={k.caps} onChange={(caps) => update("keyboard", { caps }).catch(() => {})} />
         </Field>
         <Field label="Загрузки Steam" description="Игра, прогресс, скорость и сколько осталось">

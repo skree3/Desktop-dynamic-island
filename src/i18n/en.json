@@ -690,5 +690,10 @@
 "Открытый код": "Open source",
 "Сделано с душой": "Made with care",
 "подключён": "connected",
-"отключён": "disconnected"
+"отключён": "disconnected",
+"Caps Lock выключен": "Caps Lock is off",
+"Клавиатура": "Keyboard",
+"Раскладка клавиатуры": "Keyboard layout",
+"Короткое уведомление без звука: RU, EN и другие": "A short silent notification: RU, EN and others",
+"Короткое уведомление без звука при включении и выключении": "A short silent notification when it turns on or off"
 }

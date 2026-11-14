@@ -1,7 +1,7 @@
 // Состояние панели: режим отображения, активная панель, уведомления, активности.
 
 import { create } from "zustand";
-import type { Activity, GameModeState, KbdState, NotificationPayload, PrivacyState, Priority } from "../types";
+import type { Activity, GameModeState, NotificationPayload, PrivacyState, Priority } from "../types";
 
 export type IslandMode = "compact" | "expanded" | "notification";
 
@@ -32,9 +32,6 @@ interface IslandStore {
   /** Полноэкранное приложение — остров сжат в тонкую полоску. */
   strip: boolean;
   setStrip: (s: boolean) => void;
-  /** Раскладка и Caps Lock. */
-  kbd: KbdState;
-  setKbd: (k: KbdState) => void;
   expand: (card?: string | null) => void;
   collapse: () => void;
   setCard: (card: string) => void;
@@ -61,8 +58,6 @@ export const useIsland = create<IslandStore>((set, get) => ({
   setGreeting: (greeting) => set({ greeting }),
   strip: false,
   setStrip: (strip) => set({ strip }),
-  kbd: { layout: null, caps: false },
-  setKbd: (kbd) => set({ kbd }),
 
   expand: (card) => set({ mode: "expanded", activeCard: card ?? get().activeCard }),
   collapse: () => {

@@ -99,6 +99,8 @@ export function Island() {
   const size = useMemo(() => {
     if (mode === "expanded") return { w: 384 * scale, h: Math.min(MAX_EXPANDED_H, HEADER_H + contentH) * scale };
     if (mode === "notification" && notification) {
+      // Подсказка клавиатуры — небольшая «пилюля», а не карточка уведомления.
+      if (notification.source === "kbd") return { w: (notification.title.startsWith("Caps") ? 236 : 200) * scale, h: 44 * scale };
       const stackLines = Math.min(2, notification.stack?.length ?? 0);
       return { w: 360 * scale, h: ((notification.actions.length ? 104 : 76) + stackLines * 17) * scale };
     }
@@ -109,7 +111,8 @@ export function Island() {
   }, [mode, contentH, notification, wide, hovered, scale, settings.systemMonitor.showInCompact, strip, greeting]);
 
   // Овальная форма: в свёрнутом виде — полная «пилюля», раскрытый остров — крупные скругления.
-  const radius = mode === "expanded" ? 30 * scale : mode === "notification" ? 28 * scale : (size.h / 2);
+  const kbdNotice = mode === "notification" && notification?.source === "kbd";
+  const radius = mode === "expanded" ? 30 * scale : mode === "notification" && !kbdNotice ? 28 * scale : size.h / 2;
   const topRadius = attached ? 0 : radius;
 
   useFixedFrame(scale);
@@ -120,6 +123,7 @@ export function Island() {
   // (или заданное время). Звуки одного типа не накладываются — у каждого свой канал.
   const notifId = notification?.id;
   const isTimer = notification?.kind === "timer";
+  const silent = notification?.source === "kbd";
   const sounds = settings.sounds;
   useEffect(() => {
     if (!notifId) return;
@@ -128,7 +132,7 @@ export function Island() {
       playSound("timer", sounds.timer, sounds.timerVolume, { loop: true, limitSecs: sounds.timerLimitSecs || undefined });
       return () => stopSound("timer");
     }
-    if (settings.notifications.sound && !settings.notifications.dnd) playSound("notification", sounds.notification, sounds.notificationVolume);
+    if (!silent && settings.notifications.sound && !settings.notifications.dnd) playSound("notification", sounds.notification, sounds.notificationVolume);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [notifId]);
   // Раскрыли остров во время сигнала — это тоже «остановить».

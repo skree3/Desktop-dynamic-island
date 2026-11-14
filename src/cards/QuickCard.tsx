@@ -3,7 +3,6 @@
 
 import { useState, type ReactNode } from "react";
 import {
-  ArrowBigUp,
   BatteryCharging,
   BatteryFull,
   BatteryLow,
@@ -11,7 +10,6 @@ import {
   Bluetooth,
   BluetoothOff,
   Droplet,
-  Keyboard,
   Leaf,
   Plane,
   Power,
@@ -30,7 +28,6 @@ import { AppMixer, HeadphonesRow } from "../components/SoundExtras";
 import { useLoad, usePoll } from "../hooks/common";
 import { errorMessage, ipc } from "../services/ipc";
 import { useApp } from "../stores/app";
-import { useIsland } from "../stores/island";
 import type { QuickState } from "../types";
 import { hexToRgba } from "../utils/format";
 
@@ -71,7 +68,6 @@ export default function QuickCard() {
   const bright = useLoad(() => (modules?.brightness ? ipc.brightness() : Promise.resolve(null)), [modules?.brightness]);
   const vpnClient = useApp((s) => s.settings?.vpn.client ?? "auto");
   const vpn = useLoad(() => (vpnClient === "none" ? Promise.resolve(null) : ipc.vpnStatus()), [vpnClient]);
-  const kbd = useIsland((s) => s.kbd);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<null | { action: "shutdown" | "reboot"; token: string }>(null);
@@ -171,20 +167,6 @@ export default function QuickCard() {
         ) : (
           <Tile icon={<Settings size={18} />} label="Параметры" sub="Системы" onClick={() => act("set", () => ipc.openSystemSettings("main"))} />
         )}
-        <Tile
-          icon={<Keyboard size={18} />}
-          label="Раскладка"
-          sub={kbd.layout ?? "—"}
-          title="Следующая раскладка в активном окне"
-          onClick={() => act("kbd", () => ipc.kbdNextLayout())}
-        />
-        <Tile
-          icon={<ArrowBigUp size={18} />}
-          label="Caps Lock"
-          sub={kbd.caps ? "Вкл." : "Выкл."}
-          on={kbd.caps}
-          onClick={() => act("caps", () => ipc.kbdCapsToggle())}
-        />
         {vpn.data?.client && <Tile icon={<Settings size={18} />} label="Параметры" sub="Системы" onClick={() => act("set", () => ipc.openSystemSettings("main"))} />}
       </div>
 

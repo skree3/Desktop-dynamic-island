@@ -175,7 +175,10 @@ impl QueueState {
         if self.is_duplicate(&n) {
             return PushOutcome::Dropped("дубликат");
         }
-        self.add_history(&n);
+        // Индикаторы клавиатуры (раскладка, Caps Lock) — мгновенные подсказки, в историю не попадают.
+        if n.source != "kbd" {
+            self.add_history(&n);
+        }
 
         if self.suppressed {
             self.missed_while_suppressed += 1;

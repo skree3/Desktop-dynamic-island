@@ -1,7 +1,7 @@
 // Данные раздела «Об авторе». Чтобы добавить соцсеть, допишите строку в `links`
 // (иконки — из lucide-react), фото — замените src/assets/author.png.
 
-import { Bug, Code2, Download, FolderGit2, Heart, Sparkles, Star, type LucideIcon } from "lucide-react";
+import { Bug, Code2, Download, FolderGit2, Heart, MessageCircle, Send, Sparkles, Star, type LucideIcon } from "lucide-react";
 import avatar from "../assets/author.png";
 
 export interface AuthorLink {
@@ -24,6 +24,8 @@ export const AUTHOR = {
     { label: "Сделано с душой", icon: Heart },
   ] as { label: string; icon: LucideIcon }[],
   links: [
+    { label: "Telegram", url: "https://t.me/disscracthion", icon: Send },
+    { label: "Discord", url: "https://discord.com/users/1067374308151787530", icon: MessageCircle },
     { label: "GitHub", url: "https://github.com/skree3", icon: FolderGit2 },
     { label: "Desktop Island на GitHub", url: REPO, icon: Star },
     { label: "Все версии", url: `${REPO}/releases`, icon: Download },

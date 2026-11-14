@@ -1,4 +1,4 @@
-//! Индикаторы в острове: смена раскладки и Caps Lock (короткая вспышка),
+//! Индикаторы: смена раскладки и Caps Lock (короткое уведомление без звука),
 //! режим «в самолёте» (самолётик летит, пока режим включён) и подключение VPN
 //! (Happ, INCY). Один фоновый опрос: клавиатура — 150 мс, радио и VPN — 2 с.
 
@@ -12,7 +12,7 @@ use crate::core::error::{AppError, AppResult};
 use crate::core::state::Shared;
 use crate::core::task::TaskSlot;
 use crate::database::now_ms;
-use crate::events::{Activity, Priority};
+use crate::events::{Activity, IslandNotification, NotificationKind, Priority};
 use crate::platform::os;
 
 #[derive(Debug, Clone, Serialize, Default, PartialEq)]
@@ -126,7 +126,7 @@ impl IndicatorsModule {
         self.kbd.lock().unwrap_or_else(|p| p.into_inner()).clone()
     }
 
-    /// Короткая вспышка в острове (раскладка, Caps Lock, VPN).
+    /// Короткая вспышка в острове (VPN).
     fn flash(&self, st: &Shared, kind: &str, title: String, subtitle: Option<String>, ms: u64) {
         let gen = self.flash_gen.fetch_add(1, Ordering::SeqCst) + 1;
         st.events.set_activity(Activity {
@@ -146,6 +146,28 @@ impl IndicatorsModule {
             if st.indicators.flash_gen.load(Ordering::SeqCst) == gen {
                 st.events.clear_activity("flash");
             }
+        });
+    }
+
+    /// Смена раскладки или Caps Lock — короткое уведомление острова без звука
+    /// (новое сразу заменяет предыдущее, в историю не сохраняется).
+    fn kbd_notice(st: &Shared, title: String, body: &str) {
+        st.events.dismiss_source("kbd");
+        st.events.push(IslandNotification {
+            stack: Vec::new(),
+            count: 1,
+            id: uuid::Uuid::new_v4().to_string(),
+            kind: NotificationKind::Internal,
+            source: "kbd".into(),
+            app_name: "Клавиатура".into(),
+            icon: None,
+            title,
+            body: body.into(),
+            priority: Priority::High,
+            timestamp: now_ms(),
+            actions: vec![],
+            open_target: None,
+            duration_ms: 1600,
         });
     }
 
@@ -189,9 +211,9 @@ impl IndicatorsModule {
                     let k = tauri::async_runtime::spawn_blocking(|| KbdState { layout: os::keyboard::layout(), caps: os::keyboard::caps() }).await.unwrap_or_default();
                     if let Some(prev) = &last_kbd {
                         if cfg.keyboard.caps && k.caps != prev.caps {
-                            st.indicators.flash(&st, "caps", "Caps Lock".into(), Some(if k.caps { "вкл." } else { "выкл." }.into()), 1400);
+                            Self::kbd_notice(&st, if k.caps { "Caps Lock включён".into() } else { "Caps Lock выключен".into() }, "");
                         } else if cfg.keyboard.layout && k.layout.is_some() && k.layout != prev.layout && prev.layout.is_some() {
-                            st.indicators.flash(&st, "layout", k.layout.clone().unwrap_or_default(), None, 1200);
+                            Self::kbd_notice(&st, k.layout.clone().unwrap_or_default(), "Раскладка клавиатуры");
                         }
                     }
                     if last_kbd.as_ref() != Some(&k) {

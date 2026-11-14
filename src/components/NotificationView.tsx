@@ -1,7 +1,7 @@
 import { useState } from "react";
 // Отображение текущего уведомления из очереди Event Manager.
 
-import { Bell, ExternalLink, Hourglass, Puzzle, X } from "lucide-react";
+import { ArrowBigUp, Bell, ExternalLink, Hourglass, Keyboard, Puzzle, X } from "lucide-react";
 import { ipc } from "../services/ipc";
 import { useIsland } from "../stores/island";
 import type { IslandNotification } from "../types";
@@ -18,7 +18,34 @@ function KindIcon({ n }: { n: IslandNotification }) {
   );
 }
 
+/** Раскладка и Caps Lock: компактная «пилюля» — значок клавиши, крупный текст и состояние. */
+function KbdNotice({ n }: { n: IslandNotification }) {
+  const caps = n.title.startsWith("Caps");
+  const on = caps && n.title.endsWith("включён");
+  return (
+    <div className={`kbd-notice ${caps ? "caps" : "layout"} ${on ? "on" : ""}`}>
+      <span className="kbd-key">{caps ? <ArrowBigUp size={16} /> : <Keyboard size={16} />}</span>
+      {caps ? (
+        <>
+          <span className="kbd-title">Caps Lock</span>
+          <span className="kbd-state">{on ? "вкл." : "выкл."}</span>
+        </>
+      ) : (
+        <>
+          <span className="kbd-title kbd-lang">{n.title}</span>
+          <span className="kbd-sub">Раскладка</span>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function NotificationView({ n }: { n: IslandNotification }) {
+  if (n.source === "kbd") return <KbdNotice n={n} />;
+  return <RegularNotification n={n} />;
+}
+
+function RegularNotification({ n }: { n: IslandNotification }) {
   const queued = useIsland((s) => s.notification.queued);
   const [reply, setReply] = useState<string | null>(null);
   const send = () => {
