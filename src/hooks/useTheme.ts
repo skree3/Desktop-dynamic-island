@@ -36,7 +36,8 @@ export function useTheme(target: "island" | "settings") {
 
   useEffect(() => {
     if (!appearance) return;
-    const theme = themes.find((t) => t.id === appearance.themeId) ?? themes[0];
+    const list = Array.isArray(themes) ? themes : [];
+    const theme = list.find((t) => t.id === appearance.themeId) ?? list[0];
     const palette = theme?.data?.[mode] ?? {};
     const root = document.documentElement;
     const set = (k: string, v: string | undefined) => v && root.style.setProperty(k, v);

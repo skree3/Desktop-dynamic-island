@@ -164,10 +164,7 @@ export default function QuickCard() {
                   })
             }
           />
-        ) : (
-          <Tile icon={<Settings size={18} />} label="Параметры" sub="Системы" onClick={() => act("set", () => ipc.openSystemSettings("main"))} />
-        )}
-        {vpn.data?.client && <Tile icon={<Settings size={18} />} label="Параметры" sub="Системы" onClick={() => act("set", () => ipc.openSystemSettings("main"))} />}
+        ) : null}
       </div>
 
       {modules?.volume && (
@@ -258,16 +255,21 @@ export default function QuickCard() {
 
       <OpacityRow />
 
-      {modules?.power && (
-        <div className="power-row">
-          <button type="button" className="btn btn-ghost" onClick={async () => setConfirm({ action: "reboot", token: await ipc.powerRequest("reboot") })}>
-            <RotateCw size={15} /> Перезагрузить
-          </button>
-          <button type="button" className="btn btn-ghost danger-text" onClick={async () => setConfirm({ action: "shutdown", token: await ipc.powerRequest("shutdown") })}>
-            <Power size={15} /> Выключить
-          </button>
-        </div>
-      )}
+      <div className="power-row">
+        <button type="button" className="btn btn-ghost power-settings" title="Параметры системы" onClick={() => act("set", () => ipc.openSystemSettings("main"))}>
+          <Settings size={15} /> Параметры
+        </button>
+        {modules?.power && (
+          <>
+            <button type="button" className="btn btn-ghost" onClick={async () => setConfirm({ action: "reboot", token: await ipc.powerRequest("reboot") })}>
+              <RotateCw size={15} /> Перезагрузить
+            </button>
+            <button type="button" className="btn btn-ghost danger-text" onClick={async () => setConfirm({ action: "shutdown", token: await ipc.powerRequest("shutdown") })}>
+              <Power size={15} /> Выключить
+            </button>
+          </>
+        )}
+      </div>
       {confirm && (
         <Confirm
           title={confirm.action === "shutdown" ? "Выключить компьютер?" : "Перезагрузить компьютер?"}

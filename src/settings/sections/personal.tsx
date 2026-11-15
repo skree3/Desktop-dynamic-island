@@ -185,7 +185,7 @@ export function ThemesSection() {
       description="Каждая тема содержит тёмную и светлую палитру. Режим выбирается в «Внешнем виде»."
     >
       <div className="theme-grid">
-        {themes.map((t) => {
+        {(themes ?? []).map((t) => {
           const pal = t.data[mode] ?? t.data.dark;
           const on = a.themeId === t.id;
           return (

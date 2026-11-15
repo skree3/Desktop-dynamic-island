@@ -206,7 +206,8 @@ pub async fn logs_clear(state: State<'_, Shared>) -> AppResult<()> {
 #[tauri::command]
 pub async fn theme_save(state: State<'_, Shared>, json: String) -> AppResult<ThemeRow> {
     let row = crate::core::themes::import(state.inner(), &json)?;
-    state.events.emit("theme://changed", ());
+    // Окна ждут в событии весь список тем (раньше уходил пустой payload — остров и настройки падали).
+    state.events.emit(crate::events::names::THEME_CHANGED, state.db.list_themes()?);
     Ok(row)
 }
 

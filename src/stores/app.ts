@@ -48,7 +48,10 @@ export const useApp = create<AppStore>((set, get) => ({
       subscribed = true;
       on<Settings>(events.SETTINGS_CHANGED, (s) => set({ settings: s }));
       on<CardInfo[]>(events.WIDGETS_CHANGED, () => get().refreshCards());
-      on<ThemeRow[]>(events.THEME_CHANGED, (t) => set({ themes: t }));
+      on<ThemeRow[] | null>(events.THEME_CHANGED, (t) => {
+        if (Array.isArray(t)) set({ themes: t });
+        else ipc.themes().then((themes) => set({ themes })).catch(() => {});
+      });
       on(events.PLUGINS_CHANGED, () => get().refreshCards());
     }
     return void b;
