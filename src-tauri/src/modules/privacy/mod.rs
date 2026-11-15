@@ -20,7 +20,7 @@ pub const EVENT: &str = "privacy://state";
 /// Приложения, у которых занятый микрофон почти всегда означает звонок.
 const CALL_APPS: &[(&[&str], &str)] = &[
     (&["telegram", "ayugram", "kotatogram", "64gram"], "Telegram"),
-    (&["discord"], "Discord"),
+    (&["discord", "vesktop", "legcord", "armcord", "webcord", "dorion", "equibop", "goofcord"], "Discord"),
     (&["zoom"], "Zoom"),
     (&["teams"], "Microsoft Teams"),
     (&["skype"], "Skype"),
@@ -209,6 +209,7 @@ mod tests {
         assert_eq!(call_app(&u("microphone", "Telegram", Some(r"D:\Games\Telegram Desktop\Telegram.exe"))), Some("Telegram"));
         assert_eq!(call_app(&u("microphone", "Zoom", None)), Some("Zoom"));
         assert_eq!(call_app(&u("camera", "Discord", None)), None);
+        assert_eq!(call_app(&u("microphone", "Vesktop", Some("D:/Apps/Vesktop/Vesktop.exe"))), Some("Discord"));
         assert_eq!(call_app(&u("microphone", "chrome", None)), None);
         let teams = DeviceUse { app_id: Some("MSTeams_8wekyb3d8bbwe".into()), ..u("microphone", "MSTeams", None) };
         assert_eq!(call_app(&teams), Some("Microsoft Teams"));

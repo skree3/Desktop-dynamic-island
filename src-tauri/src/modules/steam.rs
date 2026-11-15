@@ -119,6 +119,119 @@ fn library_dirs(root: &Path) -> Vec<PathBuf> {
     dirs
 }
 
+/// Состояние загрузки по журналу Steam (`logs/content_log.txt`).
+/// Во время загрузки Steam почти не переписывает appmanifest (BytesDownloaded
+/// и StateFlags там обновляются только в конце), зато сразу пишет в журнал:
+///   AppID 4465480 update started : download 0/14783871008, ...
+///   AppID 4465480 state changed : Update Required,Update Queued,Update Running,Update Started,
+///   AppID 4465480 state changed : Update Required,Update Queued,Update Started, (Suspended)
+///   AppID 4465480 finished update, ...
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct LogApp {
+    pub running: bool,
+    pub suspended: bool,
+    pub downloaded: u64,
+    pub total: u64,
+    /// Загрузка закончилась («finished update»).
+    pub finished: bool,
+}
+
+pub fn apply_log_line(apps: &mut HashMap<String, LogApp>, line: &str) {
+    let Some(i) = line.find("AppID ") else { return };
+    let rest = &line[i + 6..];
+    let id: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+    if id.is_empty() {
+        return;
+    }
+    let rest = rest[id.len()..].trim_start();
+    if let Some(s) = rest.strip_prefix("state changed :") {
+        let suspended = s.contains("(Suspended)");
+        let running = s.contains("Update Running") && !suspended;
+        let started = s.contains("Update Started");
+        let e = apps.entry(id).or_default();
+        e.running = running;
+        e.suspended = suspended && started;
+        if !running && !e.suspended {
+            e.downloaded = 0;
+            e.total = 0;
+        }
+    } else if let Some(s) = rest.strip_prefix("update started :") {
+        // "download 0/14783871008, store 0/0, ..."
+        let d = s.trim().strip_prefix("download ").and_then(|d| d.split(',').next()).and_then(|d| d.split_once('/'));
+        if let Some((a, b)) = d {
+            let e = apps.entry(id).or_default();
+            e.downloaded = a.trim().parse().unwrap_or(0);
+            e.total = b.trim().parse().unwrap_or(0);
+            e.finished = false;
+        }
+    } else if rest.starts_with("finished update") || rest.starts_with("update canceled") {
+        let e = apps.entry(id).or_default();
+        e.running = false;
+        e.suspended = rest.contains("(Suspended)");
+        e.finished = rest.starts_with("finished update");
+    }
+}
+
+struct ContentLog {
+    path: PathBuf,
+    offset: u64,
+    apps: HashMap<String, LogApp>,
+    grew_at: Option<Instant>,
+}
+
+impl ContentLog {
+    fn new(root: &Path) -> Self {
+        // DI_STEAM_LOG — свой журнал для проверки без настоящей загрузки.
+        let path = std::env::var_os("DI_STEAM_LOG").map(PathBuf::from).unwrap_or_else(|| root.join("logs").join("content_log.txt"));
+        Self { path, offset: 0, apps: HashMap::new(), grew_at: None }
+    }
+
+    /// Дочитывает новые строки. При первом чтении берёт хвост файла,
+    /// чтобы подхватить загрузку, начатую до запуска острова.
+    fn poll(&mut self) {
+        use std::io::{Read, Seek, SeekFrom};
+        let Ok(mut f) = std::fs::File::open(&self.path) else { return };
+        let meta = f.metadata().ok();
+        let len = meta.as_ref().map(|m| m.len()).unwrap_or(0);
+        let first = self.grew_at.is_none() && self.offset == 0;
+        if len < self.offset {
+            self.offset = 0; // журнал начат заново
+        }
+        if len == self.offset {
+            return;
+        }
+        let start = if first { len.saturating_sub(2 * 1024 * 1024) } else { self.offset };
+        if f.seek(SeekFrom::Start(start)).is_err() {
+            return;
+        }
+        let mut buf = Vec::new();
+        if f.take(8 * 1024 * 1024).read_to_end(&mut buf).is_err() {
+            return;
+        }
+        // Обрабатываем только целые строки; хвост без \n дочитаем в следующий раз.
+        let Some(end) = buf.iter().rposition(|&b| b == b'\n') else { return };
+        let text = String::from_utf8_lossy(&buf[..end]);
+        let mut lines = text.lines();
+        if first && start > 0 {
+            lines.next(); // обрезанная первая строка
+        }
+        for l in lines {
+            apply_log_line(&mut self.apps, l);
+        }
+        self.offset = start + end as u64 + 1;
+        // При первом чтении «свежесть» — по времени изменения файла: если Steam закрыт
+        // давно, недокачанная загрузка из старого журнала не всплывёт.
+        let age = if first { meta.and_then(|m| m.modified().ok()).and_then(|t| t.elapsed().ok()).unwrap_or_default() } else { Duration::ZERO };
+        self.grew_at = Some(Instant::now().checked_sub(age).unwrap_or_else(Instant::now));
+    }
+
+    /// Журнал свежий: во время загрузки Steam раз в минуту пишет скорость.
+    /// Если Steam закрыли посреди загрузки, через 15 минут перестаём её показывать.
+    fn fresh(&self) -> bool {
+        self.grew_at.map(|t| t.elapsed() < Duration::from_secs(15 * 60)).unwrap_or(false)
+    }
+}
+
 struct Tracked {
     manifest: Manifest,
     /// Оценка скачанного между записями манифеста.
@@ -181,6 +294,7 @@ impl SteamModule {
             let mut manifests: HashMap<PathBuf, Manifest> = HashMap::new();
             let mut tracked: HashMap<String, Tracked> = HashMap::new();
             let mut meter = NetMeter::new();
+            let mut clog = Some(ContentLog::new(&root));
             let mut last_tick = Instant::now();
             loop {
                 if dirs_at.elapsed() > Duration::from_secs(120) {
@@ -190,7 +304,9 @@ impl SteamModule {
                 // Перечитываем только изменившиеся манифесты.
                 let d2 = dirs.clone();
                 let known = mtimes.clone();
-                let changed = tauri::async_runtime::spawn_blocking(move || {
+                let mut cl = clog.take().unwrap_or_else(|| ContentLog::new(&root));
+                let polled = tauri::async_runtime::spawn_blocking(move || {
+                    cl.poll();
                     let mut out = vec![];
                     let mut seen = vec![];
                     for d in d2 {
@@ -210,11 +326,14 @@ impl SteamModule {
                             }
                         }
                     }
-                    (out, seen)
+                    (cl, (out, seen))
                 })
-                .await
-                .unwrap_or_default();
-                let (updates, seen) = changed;
+                .await;
+                let Ok((cl, (updates, seen))) = polled else {
+                    tokio::time::sleep(Duration::from_secs(3)).await;
+                    continue;
+                };
+                let log = clog.insert(cl);
                 mtimes.retain(|k, _| seen.contains(k));
                 manifests.retain(|k, _| seen.contains(k));
                 for (p, m, man) in updates {
@@ -228,11 +347,36 @@ impl SteamModule {
 
                 // Активные загрузки.
                 // Поставленные на паузу показываем, только если видели их загрузку в этом сеансе.
-                let active: Vec<Manifest> = manifests
-                    .values()
-                    .filter(|m| m.active() || (m.paused() && tracked.contains_key(&m.appid) && m.downloaded < m.total))
-                    .cloned()
-                    .collect();
+                // Пока журнал Steam свежий, верим ему: манифест во время загрузки не меняется.
+                let log_live = log.fresh();
+                let mut active: Vec<Manifest> = Vec::new();
+                for m in manifests.values() {
+                    if let Some(l) = log.apps.get(&m.appid).filter(|_| log_live) {
+                        if (l.running || (l.suspended && tracked.contains_key(&m.appid))) && l.total > 0 {
+                            let mut x = m.clone();
+                            if x.total != l.total {
+                                x.downloaded = 0; // в манифесте прошлое обновление
+                            }
+                            x.total = l.total;
+                            x.downloaded = x.downloaded.max(l.downloaded).min(l.total);
+                            x.flags = if l.running { (x.flags | FLAG_UPDATE_RUNNING) & !FLAG_UPDATE_PAUSED } else { x.flags | FLAG_UPDATE_PAUSED };
+                            active.push(x);
+                        }
+                        continue;
+                    }
+                    if m.active() || (m.paused() && tracked.contains_key(&m.appid) && m.downloaded < m.total) {
+                        active.push(m.clone());
+                    }
+                }
+                // Новая игра, для которой Steam ещё не записал манифест.
+                if log_live {
+                    for (id, l) in &log.apps {
+                        if l.running && l.total > 0 && !manifests.values().any(|m| &m.appid == id) {
+                            let name = tracked.get(id).map(|t| t.manifest.name.clone()).unwrap_or_else(|| "Steam".into());
+                            active.push(Manifest { appid: id.clone(), name, flags: FLAG_UPDATE_RUNNING, downloaded: l.downloaded, total: l.total });
+                        }
+                    }
+                }
                 for m in &active {
                     let t = tracked.entry(m.appid.clone()).or_insert_with(|| Tracked { manifest: m.clone(), estimate: m.downloaded as f64, last_seen: Instant::now() });
                     if t.manifest.downloaded != m.downloaded || t.manifest.total != m.total {
@@ -250,7 +394,8 @@ impl SteamModule {
                 let finished: Vec<String> = tracked.keys().filter(|id| !active.iter().any(|m| &m.appid == *id)).cloned().collect();
                 for id in finished {
                     if let Some(t) = tracked.remove(&id) {
-                        let done = manifests.values().find(|m| m.appid == id).map(|m| m.done()).unwrap_or(false);
+                        let by_log = log.apps.get(&id).map(|l| l.finished).unwrap_or(false);
+                        let done = by_log || manifests.values().find(|m| m.appid == id).map(|m| m.done()).unwrap_or(false);
                         if done {
                             st.events.push(IslandNotification {
                                 stack: Vec::new(),
@@ -340,5 +485,33 @@ mod tests {
         assert_eq!(libs, vec![PathBuf::from("C:\\Program Files (x86)\\Steam"), PathBuf::from("D:\\SteamLibrary")]);
         assert_eq!(format_eta(30.0), "30 с");
         assert_eq!(format_eta(150.0), "3 мин");
+    }
+
+    #[test]
+    fn parses_content_log() {
+        let log = "[2026-11-15 16:07:10] AppID 4465480 state changed : Update Required,Update Queued,Update Running,
+[2026-11-15 16:07:13] AppID 4465480 update started : download 0/14783871008, store 0/0, reuse 0/0, delta 0/0, stage 0/34423761374 
+[2026-11-15 16:07:13] AppID 4465480 state changed : Update Required,Update Queued,Update Running,Update Started,
+[2026-11-15 16:08:24] Current download rate: 86.345 Mbps";
+        let mut apps = HashMap::new();
+        for l in log.lines() {
+            apply_log_line(&mut apps, l);
+        }
+        let a = &apps["4465480"];
+        assert!(a.running && !a.suspended && !a.finished);
+        assert_eq!((a.downloaded, a.total), (0, 14783871008));
+
+        apply_log_line(&mut apps, "[x] AppID 4465480 state changed : Update Required,Update Queued,Update Started, (Suspended)");
+        let a = &apps["4465480"];
+        assert!(!a.running && a.suspended && a.total == 14783871008);
+
+        apply_log_line(&mut apps, "[x] AppID 4465480 update started : download 455000000/14783871008, store 0/0");
+        apply_log_line(&mut apps, "[x] AppID 4465480 state changed : Update Required,Update Queued,Update Running,Update Started,");
+        assert_eq!(apps["4465480"].downloaded, 455000000);
+
+        apply_log_line(&mut apps, "[x] AppID 4465480 finished update, 6 mounted depots (BuildID 22100934)");
+        apply_log_line(&mut apps, "[x] AppID 4465480 state changed : Fully Installed,");
+        let a = &apps["4465480"];
+        assert!(!a.running && !a.suspended && a.finished);
     }
 }

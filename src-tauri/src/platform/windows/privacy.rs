@@ -109,9 +109,69 @@ fn scan(kind: &str, out: &mut Vec<DeviceUse>) {
     }
 }
 
+/// Запасной способ для микрофона: активные сеансы записи звука (WASAPI).
+/// Работает, даже когда Windows не ведёт журнал в реестре — например, если
+/// «твикер» отключил службу «Диспетчер доступа к возможностям» (camsvc).
+fn capture_sessions(out: &mut Vec<DeviceUse>) {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+    use windows::core::Interface;
+    use windows::Win32::Media::Audio::{IAudioSessionControl2, IAudioSessionManager2, DEVICE_STATE_ACTIVE};
+    // Когда сеанс замечен впервые — чтобы длительность звонка не сбрасывалась.
+    static SINCE: OnceLock<Mutex<HashMap<String, i64>>> = OnceLock::new();
+    ensure_com();
+    let own_pid = std::process::id();
+    let own = std::env::current_exe().ok().map(|p| p.to_string_lossy().to_lowercase());
+    let mut found: Vec<String> = Vec::new();
+    unsafe {
+        let Ok(en) = CoCreateInstance::<_, IMMDeviceEnumerator>(&MMDeviceEnumerator, None, CLSCTX_ALL) else { return };
+        let Ok(col) = en.EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE) else { return };
+        for i in 0..col.GetCount().unwrap_or(0) {
+            let Ok(dev) = col.Item(i) else { continue };
+            let Ok(mgr) = dev.Activate::<IAudioSessionManager2>(CLSCTX_ALL, None) else { continue };
+            let Ok(list) = mgr.GetSessionEnumerator() else { continue };
+            for j in 0..list.GetCount().unwrap_or(0) {
+                let Ok(ctl) = list.GetSession(j) else { continue };
+                // 1 = AudioSessionStateActive: программа сейчас пишет звук.
+                if ctl.GetState().map(|s| s.0).unwrap_or(0) != 1 {
+                    continue;
+                }
+                let Ok(c2) = ctl.cast::<IAudioSessionControl2>() else { continue };
+                let pid = c2.GetProcessId().unwrap_or(0);
+                if pid == 0 || pid == own_pid {
+                    continue;
+                }
+                let Some(path) = super::foreground::process_path(pid) else { continue };
+                let low = path.to_lowercase();
+                if Some(&low) == own.as_ref() || found.contains(&low) {
+                    continue;
+                }
+                found.push(low);
+                let known = out.iter().any(|u| u.device == "microphone" && u.app_path.as_deref().map(|p| p.eq_ignore_ascii_case(&path)).unwrap_or(false));
+                if known {
+                    continue;
+                }
+                let stem = std::path::Path::new(&path).file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| path.clone());
+                out.push(DeviceUse { device: "microphone".into(), app_name: stem, app_path: Some(path), app_id: None, since: 0 });
+            }
+        }
+    }
+    let mut since = SINCE.get_or_init(Default::default).lock().unwrap_or_else(|p| p.into_inner());
+    since.retain(|k, _| found.contains(k));
+    let now = crate::database::now_ms();
+    for u in out.iter_mut().filter(|u| u.since == 0) {
+        let key = u.app_path.as_deref().unwrap_or("").to_lowercase();
+        u.since = *since.entry(key).or_insert(now);
+    }
+}
+
 pub fn in_use() -> Vec<DeviceUse> {
     let mut out = vec![];
-    scan("microphone", &mut out);
+    // DI_PRIVACY_NO_REGISTRY — проверка запасного способа, как будто журнала в реестре нет.
+    if std::env::var_os("DI_PRIVACY_NO_REGISTRY").is_none() {
+        scan("microphone", &mut out);
+    }
+    capture_sessions(&mut out);
     scan("webcam", &mut out);
     out
 }
