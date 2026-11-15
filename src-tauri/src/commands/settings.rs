@@ -211,6 +211,58 @@ pub async fn theme_save(state: State<'_, Shared>, json: String) -> AppResult<The
     Ok(row)
 }
 
+fn find_theme(state: &Shared, id: &str) -> AppResult<ThemeRow> {
+    state.db.list_themes()?.into_iter().find(|t| t.id == id).ok_or_else(|| AppError::NotFound("тема".into()))
+}
+
+/// Код темы для отправки другому человеку.
+#[tauri::command]
+pub async fn theme_share_code(state: State<'_, Shared>, id: String) -> AppResult<String> {
+    Ok(crate::core::themes::export_code(&find_theme(state.inner(), &id)?))
+}
+
+/// Добавляет тему из присланного кода (или текста JSON-файла).
+#[tauri::command]
+pub async fn theme_import(state: State<'_, Shared>, text: String) -> AppResult<ThemeRow> {
+    let row = crate::core::themes::import_shared(state.inner(), &text)?;
+    state.events.emit(crate::events::names::THEME_CHANGED, state.db.list_themes()?);
+    Ok(row)
+}
+
+/// Сохраняет тему в файл. Возвращает путь или None, если окно закрыли.
+#[tauri::command]
+pub async fn theme_export_file(app: AppHandle, state: State<'_, Shared>, id: String) -> AppResult<Option<String>> {
+    use tauri_plugin_dialog::DialogExt;
+    let row = find_theme(state.inner(), &id)?;
+    let file_name: String = row.name.chars().map(|c| if c.is_alphanumeric() || c == ' ' || c == '-' { c } else { '_' }).collect();
+    let file_name = format!("{}.ditheme.json", file_name.trim().trim_matches('.'));
+    let picked = tauri::async_runtime::spawn_blocking(move || {
+        app.dialog().file().set_title("Сохранить тему").set_file_name(file_name).add_filter("Тема Desktop Island", &["json"]).blocking_save_file()
+    })
+    .await?;
+    let Some(path) = picked.and_then(|f| f.into_path().ok()) else { return Ok(None) };
+    std::fs::write(&path, crate::core::themes::export_json(&row))?;
+    Ok(Some(path.to_string_lossy().into_owned()))
+}
+
+/// Добавляет тему из файла.
+#[tauri::command]
+pub async fn theme_import_file(app: AppHandle, state: State<'_, Shared>) -> AppResult<Option<ThemeRow>> {
+    use tauri_plugin_dialog::DialogExt;
+    let picked = tauri::async_runtime::spawn_blocking(move || {
+        app.dialog().file().set_title("Тема Desktop Island").add_filter("Тема Desktop Island", &["json", "txt"]).blocking_pick_file()
+    })
+    .await?;
+    let Some(path) = picked.and_then(|f| f.into_path().ok()) else { return Ok(None) };
+    if std::fs::metadata(&path)?.len() > 32 * 1024 {
+        return Err(AppError::invalid("файл слишком большой для темы"));
+    }
+    let text = std::fs::read_to_string(&path).map_err(|_| AppError::invalid("это не файл темы"))?;
+    let row = crate::core::themes::import_shared(state.inner(), &text)?;
+    state.events.emit(crate::events::names::THEME_CHANGED, state.db.list_themes()?);
+    Ok(Some(row))
+}
+
 /// Выбор своих обоев окна настроек: файл копируется в папку программы.
 #[tauri::command]
 pub async fn wallpaper_pick(app: AppHandle, state: State<'_, Shared>) -> AppResult<Option<String>> {

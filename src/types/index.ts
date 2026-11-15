@@ -259,7 +259,7 @@ export interface ThemeRow {
   id: string;
   name: string;
   builtin: boolean;
-  data: { dark: Record<string, string>; light: Record<string, string> };
+  data: { dark: Record<string, string>; light: Record<string, string>; source?: { accent: string; base: string | null; tint: string | null } };
 }
 
 export interface Bootstrap {

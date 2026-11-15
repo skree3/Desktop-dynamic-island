@@ -695,5 +695,21 @@
 "Клавиатура": "Keyboard",
 "Раскладка клавиатуры": "Keyboard layout",
 "Короткое уведомление без звука: RU, EN и другие": "A short silent notification: RU, EN and others",
-"Короткое уведомление без звука при включении и выключении": "A short silent notification when it turns on or off"
+"Короткое уведомление без звука при включении и выключении": "A short silent notification when it turns on or off",
+"Изменение": "Editing",
+"Сохранить изменения": "Save changes",
+"Поделиться": "Share",
+"Импорт темы": "Import theme",
+"Поделиться темой": "Share theme",
+"Отправьте код или файл. Получатель добавит тему кнопкой «Импорт темы».": "Send the code or the file. The recipient adds the theme with “Import theme”.",
+"В файл…": "To file…",
+"Скопировать код": "Copy code",
+"Код скопирован": "Code copied",
+"Файл сохранён": "File saved",
+"Вставьте код темы, который вам прислали, или выберите файл темы.": "Paste the theme code you received, or choose a theme file.",
+"Из файла…": "From file…",
+"Каждая тема содержит тёмную и светлую палитру. Режим выбирается в «Внешнем виде». Свои темы можно изменить, отправить другому человеку или удалить — кнопки появляются при наведении на карточку.": "Each theme has a dark and a light palette. The mode is chosen in Appearance. Your own themes can be edited, shared or deleted — the buttons appear when you hover a card.",
+"Тема включена — после удаления включится «Полночь». Вернуть тему можно только из кода или файла.": "This theme is active — Midnight will be applied after deletion. It can only be restored from a code or file.",
+"Вернуть тему можно только из кода или файла, если вы им делились.": "The theme can only be restored from a code or file, if you shared it.",
+"Не удалось скопировать — выделите код и нажмите Ctrl+C": "Could not copy — select the code and press Ctrl+C"
 }
