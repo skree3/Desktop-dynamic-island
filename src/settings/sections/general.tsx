@@ -1,6 +1,6 @@
 // Разделы: Общие, Внешний вид, Положение панели.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button, Note, Segmented, Slider, Spinner, Toggle } from "../../components/ui";
 import { useAction } from "../../hooks/common";
 import { ipc } from "../../services/ipc";
@@ -210,10 +210,15 @@ function UpdatesGroup() {
   const update = useApp((x) => x.update);
   const [info, setInfo] = useState<UpdateInfo | null>(null);
   const { error, busy, run } = useAction();
+  // Результат фоновой проверки виден сразу, без нажатия «Проверить».
+  useEffect(() => {
+    ipc.updateLast().then((i) => i && setInfo(i)).catch(() => {});
+  }, []);
   const check = () => run(async () => setInfo(await ipc.updateCheck()));
+  const releases = info?.pageUrl || "https://github.com/skree3/Desktop-dynamic-island/releases/latest";
   return (
     <Group title="Обновления">
-      <Field label="Проверять обновления автоматически" description="Раз в 6 часов Desktop Island спрашивает у GitHub, вышла ли новая версия. Никакие ваши данные не отправляются.">
+      <Field label="Проверять обновления автоматически" description="При запуске и раз в сутки Desktop Island спрашивает у GitHub, вышла ли новая версия, и показывает её в острове. Никакие ваши данные не отправляются.">
         <Toggle checked={s.checkUpdates} onChange={(v) => run(() => update("general", { checkUpdates: v }))} />
       </Field>
       <Field
@@ -235,7 +240,16 @@ function UpdatesGroup() {
           )}
         </div>
       </Field>
-      {error && <Note kind="error">{error}</Note>}
+      {error && (
+        <Note kind="error">
+          {error}
+          <div style={{ marginTop: 8 }}>
+            <Button small onClick={() => ipc.openUrl(releases).catch(() => {})}>
+              Открыть страницу релизов
+            </Button>
+          </div>
+        </Note>
+      )}
     </Group>
   );
 }

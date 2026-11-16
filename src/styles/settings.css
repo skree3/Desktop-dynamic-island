@@ -26,13 +26,18 @@
 .isle-count { font-family: "Cascadia Mono", ui-monospace, Consolas, monospace; font-size: 12px; color: var(--s-muted); font-variant-numeric: tabular-nums; }
 .isle-chev { color: var(--s-muted); transition: transform 0.36s cubic-bezier(0.22, 1, 0.36, 1); flex-shrink: 0; }
 .isle.open .isle-chev { transform: rotate(90deg); }
+/* Раскрытие группы: высота плавно растёт от 0 до содержимого (grid 0fr -> 1fr). */
+.isle-collapse { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.38s cubic-bezier(0.22, 1, 0.36, 1); }
+.isle.open .isle-collapse { grid-template-rows: 1fr; }
+.isle-clip { min-height: 0; overflow: hidden; }
 .isle-list { display: flex; flex-direction: column; gap: 2px; padding: 0 8px 10px; }
-.isle-list > * { animation: isle-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) both; }
-.isle-list > *:nth-child(2) { animation-delay: 0.03s; }
-.isle-list > *:nth-child(3) { animation-delay: 0.06s; }
-.isle-list > *:nth-child(4) { animation-delay: 0.09s; }
-.isle-list > *:nth-child(5) { animation-delay: 0.12s; }
-@keyframes isle-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+.isle-list > * { opacity: 0; transform: translateY(-6px); transition: opacity 0.18s, transform 0.18s, background-color 0.2s, color 0.2s; }
+.isle.open .isle-list > * { opacity: 1; transform: none; transition: opacity 0.3s cubic-bezier(0.22, 1, 0.36, 1), transform 0.34s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.2s, color 0.2s; }
+.isle.open .isle-list > *:nth-child(2) { transition-delay: 0.03s, 0.03s, 0s, 0s; }
+.isle.open .isle-list > *:nth-child(3) { transition-delay: 0.06s, 0.06s, 0s, 0s; }
+.isle.open .isle-list > *:nth-child(4) { transition-delay: 0.09s, 0.09s, 0s, 0s; }
+.isle.open .isle-list > *:nth-child(5) { transition-delay: 0.12s, 0.12s, 0s, 0s; }
+.isle.open .isle-list > *:nth-child(n+6) { transition-delay: 0.15s, 0.15s, 0s, 0s; }
 .isle-item {
   position: relative; display: flex; align-items: center; width: 100%; height: 32px; padding: 0 12px 0 46px; border: 0; border-radius: 8px;
   background: none; color: var(--s-text2); font: inherit; font-size: 13px; cursor: pointer; text-align: left;
@@ -50,6 +55,9 @@
 .section-enter .group:nth-of-type(3) { animation-delay: 0.1s; }
 .section-enter .group:nth-of-type(4) { animation-delay: 0.15s; }
 @keyframes section-in { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+/* Уход раздела: короткое затухание со сдвигом, затем въезжает новый. */
+.section-leave { animation: section-out 0.13s cubic-bezier(0.4, 0, 1, 1) both; pointer-events: none; }
+@keyframes section-out { to { opacity: 0; transform: translateX(-14px); } }
 @keyframes section-fade { from { opacity: 0; } to { opacity: 1; } }
 .page { max-width: 680px; }
 .page-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 24px; }

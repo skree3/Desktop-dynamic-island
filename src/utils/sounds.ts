@@ -74,10 +74,21 @@ export const TIMER_SOUNDS: SoundDef[] = [
 ];
 
 let ctx: AudioContext | null = null;
+let idleTimer: number | undefined;
 function audio(): AudioContext {
+  window.clearTimeout(idleTimer);
   ctx ??= new AudioContext();
   if (ctx.state === "suspended") ctx.resume().catch(() => {});
   return ctx;
+}
+
+/** Через 4 с тишины аудиоконтекст засыпает: иначе поток вывода звука открыт всегда
+ *  (лишняя память и процессор, а приложение висит в микшере громкости как «играющее»). */
+function suspendWhenIdle() {
+  window.clearTimeout(idleTimer);
+  idleTimer = window.setTimeout(() => {
+    if (ctx && ctx.state === "running" && Object.keys(stops).length === 0) ctx.suspend().catch(() => {});
+  }, 4000);
 }
 
 const stops: Partial<Record<Channel, () => void>> = {};
@@ -108,6 +119,7 @@ export async function playSound(ch: Channel, id: string, volume: number, opts: {
     stopped = true;
     window.clearTimeout(limitTimer);
     opts.onEnd?.();
+    suspendWhenIdle();
   };
 
   if (id.startsWith("custom:")) {
@@ -116,6 +128,8 @@ export async function playSound(ch: Channel, id: string, volume: number, opts: {
     if (!url) {
       try {
         url = await ipc.soundData(file);
+        // Свои звуки — это целые файлы в памяти: держим не больше двух последних.
+        if (dataCache.size >= 2) dataCache.delete(dataCache.keys().next().value!);
         dataCache.set(file, url);
       } catch {
         return playSound(ch, ch === "timer" ? "radar" : "glass", volume, opts);

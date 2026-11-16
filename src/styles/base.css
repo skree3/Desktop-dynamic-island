@@ -60,15 +60,18 @@ img { -webkit-user-drag: none; }
 .toggle {
   width: 38px; height: 20px; border-radius: 10px; border: 1px solid var(--border);
   background: var(--surface-hover); position: relative; cursor: pointer; flex-shrink: 0;
-  transition: background 0.18s;
+  transition: background-color 0.28s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.28s;
 }
 .toggle .knob {
-  position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; border-radius: 50%;
-  background: var(--text-muted); transition: transform 0.18s cubic-bezier(.3,.7,.4,1.3), background 0.18s, width 0.12s;
+  position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; border-radius: 6px;
+  background: var(--text-muted);
+  transition: transform 0.34s cubic-bezier(0.34, 1.4, 0.5, 1), background-color 0.28s, width 0.16s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .toggle.on { background: var(--accent); border-color: transparent; }
 .toggle.on .knob { transform: translateX(18px); background: var(--accent-text); }
-.toggle:active .knob { width: 15px; }
+/* Нажатие: бегунок вытягивается в сторону движения и не вылезает за край. */
+.toggle:active:not(:disabled) .knob { width: 15px; }
+.toggle.on:active:not(:disabled) .knob { transform: translateX(15px); }
 .toggle:disabled { opacity: 0.4; cursor: default; }
 
 /* Слайдер */

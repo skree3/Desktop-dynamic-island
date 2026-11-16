@@ -62,7 +62,10 @@ pub async fn ui_set_active_cards(app: AppHandle, state: State<'_, Shared>, cards
     let st = state.inner().clone();
     let cards: Vec<String> = cards.into_iter().take(16).map(|c| c.chars().take(80).collect()).collect();
     *st.flags.active_cards.lock().unwrap_or_else(|p| p.into_inner()) = cards;
-    st.flags.island_expanded.store(expanded, Ordering::SeqCst);
+    let was = st.flags.island_expanded.swap(expanded, Ordering::SeqCst);
+    if was != expanded {
+        window::island_memory_saver(&app, !expanded);
+    }
     crate::modules::reconcile(&app, &st);
     Ok(())
 }
@@ -103,6 +106,8 @@ pub async fn island_ready(app: AppHandle, state: State<'_, Shared>) -> AppResult
     // Остров стал видимым — модули, зависящие от этого (баннеры «только в острове»), включаются.
     crate::modules::reconcile(&app, st);
     crate::tray::refresh(&app);
+    // После запуска остров свёрнут — через 20 с память ужимается.
+    window::island_memory_saver(&app, true);
     Ok(())
 }
 

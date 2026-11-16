@@ -90,7 +90,14 @@ jobs:
       - name: Сборка Flatpak
         run: |
           cp linux/DesktopIsland-linux-x64.deb packaging/flatpak/
-          flatpak-builder --repo=repo --force-clean --install-deps-from=flathub build packaging/flatpak/app.desktopisland.DesktopIsland.yml
+          # Установка GNOME SDK в контейнере GitHub иногда падает с «Invalid cross-device link»
+          # и проходит со второй попытки — повторяем до трёх раз.
+          ok=0
+          for i in 1 2 3; do
+            if flatpak-builder --repo=repo --force-clean --install-deps-from=flathub build packaging/flatpak/app.desktopisland.DesktopIsland.yml; then ok=1; break; fi
+            echo "flatpak-builder: попытка $i не удалась, повторяем"; sleep 10
+          done
+          [ "$ok" = 1 ]
           flatpak build-bundle repo DesktopIsland-linux-x64.flatpak app.desktopisland.DesktopIsland
           mkdir -p out && mv DesktopIsland-linux-x64.flatpak out/
       - uses: actions/upload-artifact@v4

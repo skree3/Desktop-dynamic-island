@@ -194,6 +194,7 @@ export const ipc = {
 
   // обновления
   updateCheck: () => call<T.UpdateInfo>("update_check"),
+  updateLast: () => call<T.UpdateInfo | null>("update_last"),
   updateInstall: () => call<void>("update_install"),
 
   // игровой режим

@@ -140,6 +140,7 @@ macro_rules! all_commands {
             $crate::commands::modules::call_open,
             $crate::commands::modules::lyrics_get,
             $crate::commands::modules::update_check,
+            $crate::commands::modules::update_last,
             $crate::commands::modules::update_install,
             $crate::commands::modules::game_mode_state,
             $crate::commands::modules::game_mode_set_manual,

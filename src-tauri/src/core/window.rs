@@ -617,3 +617,49 @@ pub fn apply_settings_effect(w: &WebviewWindow, st: &AppState) {
     #[cfg(not(windows))]
     let _ = (w, st);
 }
+
+/// Экономия памяти, пока остров свёрнут: WebView2 переводится в режим низкого
+/// потребления (сбрасывает кэши отрисовки и сжимает кучу), а рабочий набор
+/// процесса отдаётся системе. При раскрытии режим сразу возвращается в обычный.
+static MEMORY_GEN: AtomicI64 = AtomicI64::new(0);
+
+pub fn island_memory_saver(app: &AppHandle, collapsed: bool) {
+    let gen = MEMORY_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+    if !collapsed {
+        set_memory_low(app, false);
+        return;
+    }
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        // Свёрнут ненадолго (листают карточки, пришло уведомление) — ничего не делаем.
+        tokio::time::sleep(Duration::from_secs(20)).await;
+        if MEMORY_GEN.load(Ordering::SeqCst) == gen {
+            set_memory_low(&app, true);
+        }
+    });
+}
+
+fn set_memory_low(app: &AppHandle, low: bool) {
+    #[cfg(windows)]
+    {
+        let Some(win) = app.get_webview_window(ISLAND) else { return };
+        let _ = win.with_webview(move |w| unsafe {
+            use webview2_com::Microsoft::Web::WebView2::Win32::{ICoreWebView2_19, COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW, COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL};
+            use windows_core_wv2::Interface;
+            if let Ok(core) = w.controller().CoreWebView2() {
+                if let Ok(c19) = core.cast::<ICoreWebView2_19>() {
+                    let _ = c19.SetMemoryUsageTargetLevel(if low { COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW } else { COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL });
+                }
+            }
+        });
+        if low {
+            unsafe {
+                let _ = windows::Win32::System::ProcessStatus::EmptyWorkingSet(windows::Win32::System::Threading::GetCurrentProcess());
+            }
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (app, low);
+    }
+}

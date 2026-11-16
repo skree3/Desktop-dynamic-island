@@ -577,6 +577,12 @@ pub async fn update_check(state: State<'_, Shared>) -> AppResult<crate::modules:
     blocking(move || st.updater.check_blocking()).await
 }
 
+/// Результат последней проверки (фоновой или ручной), без нового запроса.
+#[tauri::command]
+pub async fn update_last(state: State<'_, Shared>) -> AppResult<Option<crate::modules::updater::UpdateInfo>> {
+    Ok(state.updater.last())
+}
+
 #[tauri::command]
 pub async fn update_install(app: AppHandle, state: State<'_, Shared>) -> AppResult<()> {
     let st = state.inner().clone();
