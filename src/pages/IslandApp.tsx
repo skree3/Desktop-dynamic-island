@@ -10,7 +10,7 @@ import { useIsland } from "../stores/island";
 import { useMedia } from "../stores/media";
 import { useSys } from "../stores/sysmon";
 import { useTimers } from "../stores/timers";
-import type { Activity, GameModeState, MediaSession, NotificationPayload, PrivacyState, SysSnapshot, Timer } from "../types";
+import type { Activity, GameModeState, MediaSession, NotificationPayload, PrivacyState, SysSnapshot, ThemeRow, Timer } from "../types";
 import "../styles/island.css";
 import { greetingText, playVoice } from "../utils/voice";
 
@@ -32,6 +32,15 @@ export default function IslandApp() {
     unsubs.push(on<string>("voice://play", (name) => playVoice(name).catch(() => {})));
     unsubs.push(on<boolean>("island://strip", (s) => useIsland.getState().setStrip(s)));
     ipc.islandStrip().then((s) => useIsland.getState().setStrip(s)).catch(() => {});
+    // Предпросмотр темы из редактора: держится, пока редактор открыт (но не дольше 2 минут).
+    let previewTimer: number | undefined;
+    unsubs.push(
+      on<ThemeRow["data"] | null>("theme://preview", (d) => {
+        window.clearTimeout(previewTimer);
+        useApp.setState({ previewTheme: d ?? null });
+        if (d) previewTimer = window.setTimeout(() => useApp.setState({ previewTheme: null }), 120_000);
+      }),
+    );
     let greetTimer: number | undefined;
     unsubs.push(
       on<string>("island://greet", (reason) => {

@@ -60,6 +60,7 @@ export const ipc = {
   themeDelete: (id: string) => call<void>("theme_delete", { id }),
   themeSave: (json: string) => call<T.ThemeRow>("theme_save", { json }),
   themeShareCode: (id: string) => call<string>("theme_share_code", { id }),
+  themePreview: (json: string | null, expand = false) => call<void>("theme_preview", { json, expand }),
   themeImport: (text: string) => call<T.ThemeRow>("theme_import", { text }),
   themeExportFile: (id: string) => call<string | null>("theme_export_file", { id }),
   themeImportFile: () => call<T.ThemeRow | null>("theme_import_file"),

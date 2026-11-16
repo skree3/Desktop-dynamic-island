@@ -211,6 +211,23 @@ pub async fn theme_save(state: State<'_, Shared>, json: String) -> AppResult<The
     Ok(row)
 }
 
+/// Предпросмотр темы из редактора на настоящем острове (не сохраняя её).
+/// `json` — тема в том же формате, что и при сохранении; `None` — вернуть выбранную.
+/// `expand` — раскрыть остров, чтобы были видны карточки.
+#[tauri::command]
+pub async fn theme_preview(app: AppHandle, json: Option<String>, expand: bool) -> AppResult<()> {
+    use tauri::Emitter;
+    let data = match json {
+        Some(j) => Some(crate::core::themes::decode_shared(&j)?.1),
+        None => None,
+    };
+    let _ = app.emit_to(crate::core::window::ISLAND, "theme://preview", data.clone());
+    if expand && data.is_some() {
+        let _ = app.emit_to(crate::core::window::ISLAND, crate::events::names::COMMAND, serde_json::json!({ "action": "open-card", "card": "quick" }));
+    }
+    Ok(())
+}
+
 fn find_theme(state: &Shared, id: &str) -> AppResult<ThemeRow> {
     state.db.list_themes()?.into_iter().find(|t| t.id == id).ok_or_else(|| AppError::NotFound("тема".into()))
 }

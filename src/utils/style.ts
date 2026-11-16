@@ -94,3 +94,95 @@ export function buildPalettes(accent: string, base?: string | null, tint?: strin
   };
   return { dark, light };
 }
+
+/** #rrggbb из любого цвета палитры (#rgb, #rrggbbaa, rgb[a]()) — для полей выбора цвета. */
+export function toHex6(c: string | undefined, fallback = "#808080"): string {
+  if (!c) return fallback;
+  const v = c.trim();
+  if (v.startsWith("#")) {
+    let h = v.slice(1);
+    if (h.length === 3 || h.length === 4) h = h.split("").map((x) => x + x).join("");
+    return /^[0-9a-fA-F]{6}/.test(h) ? `#${h.slice(0, 6).toLowerCase()}` : fallback;
+  }
+  const m = v.match(/^rgba?\(([^)]+)\)$/);
+  if (!m) return fallback;
+  const [r, g, b] = m[1].split(",").map((x) => parseFloat(x));
+  return hex([r, g, b]);
+}
+
+/** Прозрачность цвета палитры (1 — непрозрачный). */
+export function alphaOf(c: string | undefined): number {
+  if (!c) return 1;
+  const v = c.trim();
+  if (v.startsWith("#") && (v.length === 9 || v.length === 5)) {
+    const a = v.length === 9 ? v.slice(7, 9) : v.slice(4, 5).repeat(2);
+    return parseInt(a, 16) / 255;
+  }
+  const m = v.match(/^rgba\(([^)]+)\)$/);
+  return m ? parseFloat(m[1].split(",")[3] ?? "1") : 1;
+}
+
+/** Цвет с прозрачностью: #rrggbb при a = 1, иначе rgba(). */
+export function withAlpha(hex6: string, a: number): string {
+  if (a >= 0.999) return hex6;
+  const [r, g, b] = parse(hex6);
+  return `rgba(${r}, ${g}, ${b}, ${Math.round(a * 1000) / 1000})`;
+}
+
+function hsl([r, g, b]: RGB): { h: number; s: number; l: number } {
+  const x = r / 255, y = g / 255, z = b / 255;
+  const max = Math.max(x, y, z), min = Math.min(x, y, z);
+  const l = (max + min) / 2;
+  if (max === min) return { h: 0, s: 0, l };
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  const h = max === x ? (y - z) / d + (y < z ? 6 : 0) : max === y ? (z - x) / d + 2 : (x - y) / d + 4;
+  return { h: h * 60, s, l };
+}
+
+/** Основные цвета картинки: самый частый (оттенок фона), самый яркий насыщенный (акцент)
+ *  и второй насыщенный другого тона (оттенок текста). Всё считается локально. */
+export async function paletteFromImage(file: File): Promise<{ accent: string; base: string; tint: string | null }> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((res, rej) => {
+      const i = new Image();
+      i.onload = () => res(i);
+      i.onerror = () => rej(new Error("Не удалось открыть картинку"));
+      i.src = url;
+    });
+    const W = 72;
+    const H = Math.max(1, Math.round((W * img.naturalHeight) / Math.max(1, img.naturalWidth)));
+    const canvas = document.createElement("canvas");
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
+    ctx.drawImage(img, 0, 0, W, H);
+    const px = ctx.getImageData(0, 0, W, H).data;
+    const buckets = new Map<number, { r: number; g: number; b: number; n: number }>();
+    for (let i = 0; i < px.length; i += 4) {
+      if (px[i + 3] < 128) continue;
+      const key = ((px[i] >> 4) << 8) | ((px[i + 1] >> 4) << 4) | (px[i + 2] >> 4);
+      const e = buckets.get(key) ?? { r: 0, g: 0, b: 0, n: 0 };
+      e.r += px[i];
+      e.g += px[i + 1];
+      e.b += px[i + 2];
+      e.n += 1;
+      buckets.set(key, e);
+    }
+    const cols = [...buckets.values()].map((e) => {
+      const rgb: RGB = [e.r / e.n, e.g / e.n, e.b / e.n];
+      return { hex: hex(rgb), n: e.n, ...hsl(rgb) };
+    });
+    if (!cols.length) throw new Error("В картинке нет цветов");
+    const base = cols.reduce((a, b) => (b.n > a.n ? b : a));
+    const score = (c: (typeof cols)[number]) => Math.sqrt(c.n) * c.s * (1 - Math.abs(c.l - 0.55) * 1.6);
+    const ranked = cols.filter((c) => c.s > 0.2 && c.l > 0.2 && c.l < 0.85).sort((a, b) => score(b) - score(a));
+    const accent = ranked[0] ?? base;
+    const hueGap = (a: number, b: number) => Math.min(Math.abs(a - b), 360 - Math.abs(a - b));
+    const tint = ranked.find((c) => hueGap(c.h, accent.h) > 40) ?? null;
+    return { accent: accent.hex, base: base.hex, tint: tint?.hex ?? null };
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}

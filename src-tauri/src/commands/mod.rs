@@ -18,6 +18,7 @@ macro_rules! all_commands {
             $crate::commands::app::island_hitbox,
             $crate::commands::settings::theme_save,
             $crate::commands::settings::theme_share_code,
+            $crate::commands::settings::theme_preview,
             $crate::commands::settings::theme_import,
             $crate::commands::settings::theme_export_file,
             $crate::commands::settings::theme_import_file,

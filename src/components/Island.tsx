@@ -12,6 +12,7 @@ import { ExpandedView } from "./ExpandedView";
 import { NotificationView } from "./NotificationView";
 import { ipc } from "../services/ipc";
 import { useApp } from "../stores/app";
+import { useActiveTheme } from "../hooks/useTheme";
 import { pickCompact, useIsland } from "../stores/island";
 import { playSound, stopSound } from "../utils/sounds";
 
@@ -82,6 +83,21 @@ export function Island() {
   const cards = useApp((s) => s.cards);
   const { shell, content, ms } = useShellSpring();
   const scale = settings.appearance.scale;
+  const islandStyle = settings.appearance.islandStyle ?? "solid";
+  const themeShape = useActiveTheme("island")?.shape;
+  // «Аура»: поворот градиента 10 раз в секунду (дёшево для процессора), пауза без анимаций.
+  const auraRef = useRef<HTMLSpanElement>(null);
+  const animationsOn = settings.appearance.animations !== "off";
+  useEffect(() => {
+    if (islandStyle !== "aura" || !animationsOn || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    let angle = 0;
+    const id = window.setInterval(() => {
+      if (document.hidden) return;
+      angle = (angle + 4.5) % 360;
+      auraRef.current?.style.setProperty("--aura-angle", `${angle}deg`);
+    }, 100);
+    return () => window.clearInterval(id);
+  }, [islandStyle, animationsOn]);
   const [contentH, setContentH] = useState(200);
 
   // Видимые панели + временно открытая скрытая (например, поиск по горячей клавише).
@@ -112,7 +128,9 @@ export function Island() {
 
   // Овальная форма: в свёрнутом виде — полная «пилюля», раскрытый остров — крупные скругления.
   const kbdNotice = mode === "notification" && notification?.source === "kbd";
-  const radius = mode === "expanded" ? 30 * scale : mode === "notification" && !kbdNotice ? 28 * scale : size.h / 2;
+  // Скругление из своей темы (по умолчанию 30): у пилюли — не больше половины высоты.
+  const r = themeShape?.island ?? 30;
+  const radius = mode === "expanded" ? r * scale : mode === "notification" && !kbdNotice ? Math.max(6, r - 2) * scale : Math.min(size.h / 2, r === 30 ? size.h / 2 : r * scale);
   const topRadius = attached ? 0 : radius;
 
   useFixedFrame(scale);
@@ -249,7 +267,7 @@ export function Island() {
   return (
     <div className="island-root" style={{ paddingLeft: SIDE, paddingRight: SIDE }}>
       <motion.div
-        className={`island mode-${mode} ${attached ? "attached" : "floating"} tone-${settings.appearance.islandTone ?? "graphite"} ${strip && !hovered && mode === "compact" && !greeting ? "is-strip" : ""}`}
+        className={`island mode-${mode} style-${islandStyle} ${attached ? "attached" : "floating"} tone-${settings.appearance.islandTone ?? "graphite"} ${strip && !hovered && mode === "compact" && !greeting ? "is-strip" : ""}`}
         initial={false}
         animate={{
           width: size.w,
@@ -261,7 +279,15 @@ export function Island() {
         }}
         transition={shell}
         onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
+        onPointerMove={(e) => {
+          // Блик стекла и графита следует за курсором.
+          if (islandStyle === "glass" || islandStyle === "graphite") {
+            const b = e.currentTarget.getBoundingClientRect();
+            e.currentTarget.style.setProperty("--mx", `${e.clientX - b.left}px`);
+            e.currentTarget.style.setProperty("--my", `${e.clientY - b.top}px`);
+          }
+          onPointerMove(e);
+        }}
         onPointerUp={onPointerUp}
         onWheel={onWheel}
         onMouseEnter={() => useIsland.getState().setHovered(true)}
@@ -271,6 +297,8 @@ export function Island() {
           ipc.openSettings().catch(() => {});
         }}
       >
+        <span className="island-aura" aria-hidden ref={auraRef} />
+        <span className="island-sheen" aria-hidden />
         <div className="island-clip">
           <AnimatePresence mode="wait" initial={false}>
             {mode === "expanded" ? (

@@ -11,6 +11,8 @@ interface AppStore {
   settings: Settings | null;
   cards: CardInfo[];
   themes: ThemeRow[];
+  /** Тема из редактора, показанная на острове без сохранения. */
+  previewTheme: ThemeRow["data"] | null;
   environment: EnvironmentInfo | null;
   db: DbStatus | null;
   init: () => Promise<void>;
@@ -28,6 +30,7 @@ export const useApp = create<AppStore>((set, get) => ({
   settings: null,
   cards: [],
   themes: [],
+  previewTheme: null,
   environment: null,
   db: null,
 

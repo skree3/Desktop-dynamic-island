@@ -125,7 +125,61 @@ fn parse(v: &Value) -> AppResult<(Option<String>, Value)> {
     if let Some(src) = v.get("source").filter(|s| !s.is_null()) {
         data["source"] = clean_source(src)?;
     }
+    clean_extras(v, &mut data)?;
     Ok((name, data))
+}
+
+fn hex6(v: &Value) -> Option<String> {
+    let c = v.as_str()?.trim();
+    (c.len() == 7 && c.starts_with('#') && c[1..].chars().all(|x| x.is_ascii_hexdigit())).then(|| c.to_lowercase())
+}
+
+fn num(v: &Value, key: &str, min: f64, max: f64) -> AppResult<f64> {
+    let n = v.get(key).and_then(|x| x.as_f64()).ok_or_else(|| AppError::invalid(format!("нет значения «{key}»")))?;
+    if !(min..=max).contains(&n) {
+        return Err(AppError::invalid(format!("значение «{key}» вне диапазона")));
+    }
+    Ok(n)
+}
+
+/// Дополнительные параметры своей темы (всё необязательно):
+/// * `island` — цвет острова, обводка и свечение;
+/// * `shape` — скругление острова, карточек и кнопок;
+/// * `background` — градиентный фон из 2–3 цветов с углом;
+/// * `cards` — прозрачность и размытие карточек;
+/// * `manual` — палитры заданы вручную (редактор откроется в этом режиме).
+fn clean_extras(v: &Value, data: &mut Value) -> AppResult<()> {
+    if let Some(i) = v.get("island").filter(|x| !x.is_null()) {
+        let color = i.get("color").and_then(hex6).ok_or_else(|| AppError::invalid("недопустимый цвет острова"))?;
+        let border = match i.get("border") {
+            None | Some(Value::Null) => Value::Null,
+            Some(b) => Value::String(hex6(b).ok_or_else(|| AppError::invalid("недопустимый цвет обводки"))?),
+        };
+        let glow = i.get("glow").and_then(|g| g.as_bool()).unwrap_or(false);
+        data["island"] = json!({ "color": color, "border": border, "glow": glow });
+    }
+    if let Some(s) = v.get("shape").filter(|x| !x.is_null()) {
+        data["shape"] = json!({
+            "island": num(s, "island", 6.0, 32.0)?.round(),
+            "card": num(s, "card", 0.0, 28.0)?.round(),
+            "button": num(s, "button", 0.0, 20.0)?.round(),
+        });
+    }
+    if let Some(b) = v.get("background").filter(|x| !x.is_null()) {
+        let colors: Vec<String> = b.get("colors").and_then(|c| c.as_array()).into_iter().flatten().filter_map(hex6).collect();
+        if !(2..=3).contains(&colors.len()) {
+            return Err(AppError::invalid("градиент — это 2 или 3 цвета"));
+        }
+        data["background"] = json!({ "colors": colors, "angle": num(b, "angle", 0.0, 360.0)?.round() });
+    }
+    if let Some(c) = v.get("cards").filter(|x| !x.is_null()) {
+        let opacity = (num(c, "opacity", 0.2, 1.0)? * 100.0).round() / 100.0;
+        data["cards"] = json!({ "opacity": opacity, "blur": num(c, "blur", 0.0, 30.0)?.round() });
+    }
+    if v.get("manual").and_then(|m| m.as_bool()) == Some(true) {
+        data["manual"] = Value::Bool(true);
+    }
+    Ok(())
 }
 
 const MAX_SIZE: usize = 32 * 1024;
@@ -158,8 +212,10 @@ fn portable(row: &ThemeRow) -> Value {
         "dark": row.data.get("dark"),
         "light": row.data.get("light"),
     });
-    if let Some(src) = row.data.get("source").filter(|s| !s.is_null()) {
-        v["source"] = src.clone();
+    for key in ["source", "island", "shape", "background", "cards", "manual"] {
+        if let Some(x) = row.data.get(key).filter(|s| !s.is_null()) {
+            v[key] = x.clone();
+        }
     }
     v
 }
@@ -257,6 +313,35 @@ mod tests {
         assert_eq!(data["source"]["tint"], "#c9a0ff");
         // Файл (JSON) тоже принимается.
         assert!(decode_shared(&export_json(&row)).is_ok());
+    }
+
+    #[test]
+    fn theme_extras() {
+        let base = r##""dark":{"bg":"#000","text":"#fff","accent":"#f0a64a"}"##;
+        let ok = format!(
+            r##"{{"name":"x",{base},"island":{{"color":"#1A2B3C","border":null,"glow":true}},"shape":{{"island":24,"card":10.4,"button":6}},"background":{{"colors":["#112233","#445566"],"angle":135}},"cards":{{"opacity":0.734,"blur":12}},"manual":true,"evil":1}}"##
+        );
+        let (_, d) = decode_shared(&ok).unwrap();
+        assert_eq!(d["island"]["color"], "#1a2b3c");
+        assert_eq!(d["island"]["glow"], true);
+        assert_eq!(d["shape"]["card"], 10.0);
+        assert_eq!(d["background"]["colors"][1], "#445566");
+        assert_eq!(d["cards"]["opacity"], 0.73);
+        assert_eq!(d["manual"], true);
+        assert!(d.get("evil").is_none());
+        // Переносится в код темы.
+        let row = ThemeRow { id: "custom-2".into(), name: "x".into(), builtin: false, data: d };
+        let (_, d2) = decode_shared(&export_code(&row)).unwrap();
+        assert_eq!(d2["shape"]["island"], 24.0);
+        // Плохие значения отклоняются.
+        for bad in [
+            r##""island":{"color":"red"}"##,
+            r##""shape":{"island":100,"card":1,"button":1}"##,
+            r##""background":{"colors":["#112233"],"angle":10}"##,
+            r##""cards":{"opacity":0,"blur":1}"##,
+        ] {
+            assert!(decode_shared(&format!(r##"{{"name":"x",{base},{bad}}}"##)).is_err(), "{bad}");
+        }
     }
 
     #[test]

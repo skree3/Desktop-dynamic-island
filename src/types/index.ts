@@ -74,6 +74,8 @@ export interface Settings {
     language: "ru" | "en";
     fullscreenStrip: boolean;
     font: string;
+    islandStyle: IslandStyle;
+    themeFromImage: boolean;
   };
   position: { monitor: string | null; placements: Record<string, Placement>; locked: boolean; style: "edge" | "float" };
   modules: Record<ModuleId, boolean>;
@@ -255,11 +257,22 @@ export interface GameModeState {
   app: string | null;
 }
 
+export type IslandStyle = "solid" | "glass" | "neon" | "aura" | "graphite";
+
+/** Дополнительные параметры своей темы (все необязательные). */
+export interface ThemeExtras {
+  island?: { color: string; border: string | null; glow: boolean };
+  shape?: { island: number; card: number; button: number };
+  background?: { colors: string[]; angle: number };
+  cards?: { opacity: number; blur: number };
+  manual?: boolean;
+}
+
 export interface ThemeRow {
   id: string;
   name: string;
   builtin: boolean;
-  data: { dark: Record<string, string>; light: Record<string, string>; source?: { accent: string; base: string | null; tint: string | null } };
+  data: { dark: Record<string, string>; light: Record<string, string>; source?: { accent: string; base: string | null; tint: string | null } } & ThemeExtras;
 }
 
 export interface Bootstrap {

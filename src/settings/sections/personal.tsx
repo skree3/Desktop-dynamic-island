@@ -1,4 +1,4 @@
-import { buildPalettes } from "../../utils/style";
+import { StyleEditor } from "./themeEditor";
 // Разделы: Профили, Темы, Горячие клавиши.
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -104,99 +104,6 @@ export function ProfilesSection() {
       </Group>
       {error && <Note kind="error">{error}</Note>}
     </Page>
-  );
-}
-
-const STYLE_DEFAULTS = { accent: "#f0a64a", base: "#2b4a6f", tint: "#c9a0ff" };
-const isHex = (c: unknown): c is string => typeof c === "string" && /^#[0-9a-fA-F]{6}$/.test(c.trim());
-
-/** Начальные значения редактора: из исходных цветов темы, а если их нет — из её акцента. */
-function editorInit(t: ThemeRow | null) {
-  if (!t) return { name: "Мой стиль", accent: STYLE_DEFAULTS.accent, base: STYLE_DEFAULTS.base, useBase: true, tint: STYLE_DEFAULTS.tint, useTint: false };
-  const src = t.data.source;
-  const accent = isHex(src?.accent) ? src!.accent : isHex(t.data.dark?.accent) ? t.data.dark.accent : STYLE_DEFAULTS.accent;
-  return {
-    name: t.name,
-    accent,
-    base: isHex(src?.base) ? src!.base! : STYLE_DEFAULTS.base,
-    useBase: isHex(src?.base),
-    tint: isHex(src?.tint) ? src!.tint! : STYLE_DEFAULTS.tint,
-    useTint: isHex(src?.tint),
-  };
-}
-
-function StyleEditor({ editing, onSaved, onCancel }: { editing: ThemeRow | null; onSaved: (id: string, edited: boolean) => void; onCancel: () => void }) {
-  const init = editorInit(editing);
-  const [name, setName] = useState(init.name);
-  const [accent, setAccent] = useState(init.accent);
-  const [useBase, setUseBase] = useState(init.useBase);
-  const [base, setBase] = useState(init.base);
-  const [useTint, setUseTint] = useState(init.useTint);
-  const [tint, setTint] = useState(init.tint);
-  const { error, run, busy } = useAction();
-  const mode = useResolvedMode();
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (editing) ref.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [editing]);
-  const pal = buildPalettes(accent, useBase ? base : null, useTint ? tint : null);
-  const p = pal[mode];
-  const save = () =>
-    run(async () => {
-      const id = editing?.id ?? `custom-${Date.now().toString(36)}`;
-      const source = { accent, base: useBase ? base : null, tint: useTint ? tint : null };
-      await ipc.themeSave(JSON.stringify({ id, name: name.trim() || "Мой стиль", dark: pal.dark, light: pal.light, source }));
-      useApp.setState({ themes: await ipc.themes() });
-      onSaved(id, !!editing);
-    });
-  return (
-    <div ref={ref}>
-      <Group title={editing ? `Изменение: ${editing.name}` : "Свой стиль"}>
-        <div className="field wide">
-          <div className="style-editor">
-            <div className="style-colors">
-              <label className="color-pick">
-                <input type="color" value={accent} onChange={(e) => setAccent(e.target.value)} />
-                <span>Акцент</span>
-              </label>
-              <label className="color-pick" style={{ marginTop: 10 }}>
-                <input type="color" value={base} disabled={!useBase} onChange={(e) => setBase(e.target.value)} />
-                <span className="grow">Оттенок фона</span>
-                <Toggle checked={useBase} label="Оттенок фона" onChange={setUseBase} />
-              </label>
-              <label className="color-pick" style={{ marginTop: 10 }}>
-                <input type="color" value={tint} disabled={!useTint} onChange={(e) => setTint(e.target.value)} />
-                <span className="grow">Оттенок текста</span>
-                <Toggle checked={useTint} label="Оттенок текста" onChange={setUseTint} />
-              </label>
-              <input className="input" style={{ marginTop: 14, width: "100%" }} value={name} maxLength={40} aria-label="Название стиля" onChange={(e) => setName(e.target.value)} />
-              <div className="row gap" style={{ marginTop: 8 }}>
-                <Button variant="primary" disabled={busy} onClick={save}>
-                  {editing ? "Сохранить изменения" : "Сохранить и включить"}
-                </Button>
-                {editing && <Button onClick={onCancel}>Отмена</Button>}
-              </div>
-              {error && <Note kind="error">{error}</Note>}
-            </div>
-            <div className="style-preview" style={{ background: p.bg, color: p.text }}>
-              <span className="pv-island" style={{ background: "#1c1c1f" }}>
-                <i style={{ background: p.accent }} />
-                <b style={{ background: "#ededed" }} />
-              </span>
-              <span className="pv-card" style={{ background: p.surface }}>
-                Уведомления
-                <span className="pv-tg" style={{ background: p.accent }}>
-                  <style>{`.pv-tg::after{background:${p.accentText}}`}</style>
-                </span>
-              </span>
-              <span className="pv-card" style={{ background: p.surface, color: p.textMuted }}>
-                Музыка
-              </span>
-            </div>
-          </div>
-        </div>
-      </Group>
-    </div>
   );
 }
 
@@ -309,12 +216,12 @@ export function ThemesSection() {
           const on = a.themeId === t.id;
           return (
             <div key={t.id} className={`theme-card ${on ? "on" : ""} ${editing?.id === t.id ? "editing" : ""}`} onClick={() => apply(t.id)}>
-              <div className="theme-preview" style={{ background: pal.bg, color: pal.text }}>
-                <span className="theme-pill" style={{ background: "#000", boxShadow: `0 0 0 1px ${pal.border}` }}>
+              <div className="theme-preview" style={{ background: pal.bg, backgroundImage: t.data.background ? `linear-gradient(${t.data.background.angle}deg, ${t.data.background.colors.join(", ")})` : undefined, color: pal.text }}>
+                <span className="theme-pill" style={{ background: t.data.island?.color ?? "#000", boxShadow: `0 0 0 1px ${t.data.island?.border ?? pal.border}` }}>
                   <i style={{ background: pal.accent }} />
                   <b style={{ background: pal.text }} />
                 </span>
-                <span className="theme-surface" style={{ background: pal.surface }} />
+                <span className="theme-surface" style={{ background: pal.surface, opacity: t.data.cards?.opacity, borderRadius: t.data.shape ? Math.min(12, t.data.shape.card) : undefined }} />
                 {!t.builtin && (
                   <div className="theme-actions">
                     <IconButton size="sm" title="Изменить" onClick={() => setEditing(t)}>
@@ -338,6 +245,11 @@ export function ThemesSection() {
         })}
       </div>
       {error && <Note kind="error">{error}</Note>}
+      <Group title="Возможности редактора">
+        <Field label="Подбор цветов из картинки" description="В редакторе появится кнопка: выбираете обои или фото, и тема собирается из его цветов. Картинка никуда не отправляется.">
+          <Toggle checked={a.themeFromImage ?? false} label="Подбор цветов из картинки" onChange={(v) => run(() => update("appearance", { themeFromImage: v }))} />
+        </Field>
+      </Group>
       <StyleEditor
         key={editing?.id ?? `new-${editorKey}`}
         editing={editing}

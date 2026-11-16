@@ -64,6 +64,10 @@ pub struct AppearanceSettings {
     pub fullscreen_strip: bool,
     /// Шрифт интерфейса: system | встроенный id | custom:<файл в data/fonts>.
     pub font: String,
+    /// Стиль острова: solid | glass | neon | aura | graphite.
+    pub island_style: String,
+    /// В редакторе своих тем доступен подбор цветов из картинки (выключено по умолчанию).
+    pub theme_from_image: bool,
 }
 impl Default for AppearanceSettings {
     fn default() -> Self {
@@ -86,6 +90,8 @@ impl Default for AppearanceSettings {
             language: "ru".into(),
             fullscreen_strip: true,
             font: "system".into(),
+            island_style: "solid".into(),
+            theme_from_image: false,
         }
     }
 }
@@ -658,6 +664,9 @@ impl Settings {
         }
         if !matches!(a.island_tone.as_str(), "graphite" | "grey" | "black") {
             a.island_tone = "graphite".into();
+        }
+        if !matches!(a.island_style.as_str(), "solid" | "glass" | "neon" | "aura" | "graphite") {
+            a.island_style = "solid".into();
         }
         if !matches!(self.position.style.as_str(), "edge" | "float") {
             self.position.style = "float".into();

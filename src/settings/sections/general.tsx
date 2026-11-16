@@ -63,6 +63,19 @@ export function AppearanceSection() {
         </Field>
       </Group>
       <Group title="Остров">
+        <Field label="Стиль острова" description={STYLE_HINT[a.islandStyle ?? "solid"]}>
+          <Segmented
+            value={a.islandStyle ?? "solid"}
+            onChange={(islandStyle) => set({ islandStyle })}
+            options={[
+              { value: "solid", label: "Обычный" },
+              { value: "glass", label: "Стекло" },
+              { value: "neon", label: "Неон" },
+              { value: "aura", label: "Аура" },
+              { value: "graphite", label: "Графит" },
+            ]}
+          />
+        </Field>
         <Field label="Цвет острова">
           <Segmented
             value={a.islandTone ?? "graphite"}
@@ -204,6 +217,14 @@ export function PositionSection() {
     </Page>
   );
 }
+
+const STYLE_HINT: Record<string, string> = {
+  solid: "Сплошной цвет острова или градиент своей темы",
+  glass: "Жидкое стекло: полупрозрачный остров со световым ободком и бликом за курсором",
+  neon: "Светящаяся обводка цветом акцента, вспыхивает при уведомлении",
+  aura: "Переливающийся градиент по краю острова",
+  graphite: "Тёмный металл с мягким бликом",
+};
 
 function UpdatesGroup() {
   const s = useApp((x) => x.settings!.general);

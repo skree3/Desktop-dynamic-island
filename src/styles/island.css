@@ -14,7 +14,63 @@
 }
 .island.attached::before { left: -14px; -webkit-mask-image: radial-gradient(circle at 0% 100%, transparent 13.5px, #000 14px); mask-image: radial-gradient(circle at 0% 100%, transparent 13.5px, #000 14px); }
 .island.attached::after { right: -14px; -webkit-mask-image: radial-gradient(circle at 100% 100%, transparent 13.5px, #000 14px); mask-image: radial-gradient(circle at 100% 100%, transparent 13.5px, #000 14px); }
-.island.floating { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07), 0 6px 18px rgba(0, 0, 0, 0.32); }
+.island { box-shadow: var(--island-ring, 0 0 #0000), var(--island-glow, 0 0 #0000); }
+.island.floating { box-shadow: var(--island-ring, inset 0 0 0 1px rgba(255, 255, 255, 0.07)), var(--island-glow, 0 6px 18px rgba(0, 0, 0, 0.32)); }
+
+/* ---- Стили острова ---- */
+/* Обычный: сплошной цвет или градиент своей темы. */
+.island.style-solid { background-image: var(--island-gradient, none); }
+.island-sheen, .island-aura { display: none; position: absolute; border-radius: inherit; pointer-events: none; }
+
+/* Жидкое стекло: полупрозрачная заливка, световой ободок и блик за курсором. */
+.island.style-glass {
+  --island-bg: rgba(30, 32, 38, 0.5);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.03) 55%, rgba(255, 255, 255, 0.07)), var(--island-bg);
+  box-shadow: inset 0 1px 0.5px rgba(255, 255, 255, 0.5), inset 0 -1px 1px rgba(255, 255, 255, 0.1), inset 0 0 0 1px rgba(255, 255, 255, 0.16), 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+:root[data-mode="light"] .island.style-glass { --island-bg: rgba(250, 250, 252, 0.55); box-shadow: inset 0 1px 0.5px rgba(255, 255, 255, 0.9), inset 0 0 0 1px rgba(0, 0, 0, 0.08), 0 8px 24px rgba(0, 0, 0, 0.16); }
+.island.style-glass .island-sheen, .island.style-graphite .island-sheen {
+  display: block; inset: 0;
+  background: radial-gradient(160px 70px at var(--mx, 50%) var(--my, -10%), rgba(255, 255, 255, 0.2), transparent 70%);
+}
+.island.style-graphite .island-sheen { opacity: 0.55; }
+
+/* Неон: светящаяся обводка цветом акцента, вспыхивает при уведомлении. */
+.island.style-neon {
+  --neon-soft: color-mix(in srgb, var(--accent) 45%, transparent);
+  box-shadow: inset 0 0 0 1.5px var(--accent), 0 0 6px var(--neon-soft), 0 0 18px var(--neon-soft);
+}
+.island.style-neon.mode-notification { animation: neon-flash 1.4s ease-out 1; }
+@keyframes neon-flash {
+  0%, 30% { box-shadow: inset 0 0 0 2px var(--accent), 0 0 12px var(--accent), 0 0 34px var(--neon-soft); }
+}
+
+/* Аура: переливающийся градиент по краю. Кольцо — вращающийся слой под заливкой. */
+.island.style-aura { background-image: var(--island-gradient, none); box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 30%, transparent); }
+/* Кольцо шириной 2 px: внутренняя часть вырезана маской, поэтому градиент не просвечивает
+   сквозь полупрозрачный остров. */
+.island.style-aura .island-aura {
+  display: block; inset: -2px; padding: 2px; overflow: hidden;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+}
+/* Угол градиента поворачивает Island.tsx 10 раз в секунду: CSS-анимация свойства
+   перерисовывала бы остров 60 раз в секунду и заметно грузила процессор. */
+.island.style-aura .island-aura {
+  background: conic-gradient(from var(--aura-angle, 0deg), var(--accent), #ff5fa2, #7b61ff, #2fb4ff, #3ccf91, var(--accent));
+}
+:root[data-animations="off"] .island.style-neon { animation: none; }
+
+/* Графит: тёмный металл с мягким бликом, всегда светлый текст. */
+.island.style-graphite {
+  --island-bg: #3a3b41;
+  --text: #ededed; --text-muted: #a6a7ad; --surface: rgba(255, 255, 255, 0.07); --surface-hover: rgba(255, 255, 255, 0.12); --border: rgba(255, 255, 255, 0.08);
+  color: #ededed;
+  background:
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.018) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, #3a3b41 0%, #26272b 46%, #1b1c1f 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), inset 0 -1px 0 rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(255, 255, 255, 0.06), 0 6px 18px rgba(0, 0, 0, 0.35);
+}
 
 /* Компактное состояние */
 .compact { height: 100%; display: flex; align-items: center; padding: 0 14px; gap: 8px; }
@@ -77,7 +133,7 @@
 .card-pad { padding: 6px 14px 14px; position: relative; }
 .section-title { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin: 12px 0 6px; }
 .list { display: flex; flex-direction: column; gap: 2px; }
-.list-item { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 9px; transition: background 0.12s; }
+.list-item { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: calc(var(--r-card, 14px) * 0.64); transition: background 0.12s; }
 .list-item:hover { background: var(--surface); }
 .list-item.prio-high, .list-item.prio-critical { box-shadow: inset 2px 0 0 var(--warning); }
 
@@ -115,7 +171,7 @@
 /* Быстрые настройки */
 .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .tile {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 9px 10px; border-radius: 14px; min-height: 60px;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 9px 10px; border-radius: var(--r-card, 14px); min-height: 60px;
   border: 1px solid var(--border); background: var(--surface); cursor: pointer; text-align: left; transition: background 0.15s, transform 0.1s; min-width: 0; overflow: hidden;
 }
 .tile:hover:not(:disabled) { background: var(--surface-hover); }
@@ -136,14 +192,14 @@
 
 /* Системный монитор */
 .metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.metric { background: var(--surface); border-radius: 10px; padding: 8px 10px; min-width: 0; }
+.metric { background: var(--surface); border-radius: calc(var(--r-card, 14px) * 0.72); padding: 8px 10px; min-width: 0; }
 .metric-head { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text-muted); }
 .metric-head strong { margin-left: auto; color: var(--text); font-size: 13px; }
 .metric-sub { font-size: 10.5px; color: var(--text-muted); margin: 2px 0 4px; }
 .disk { display: grid; grid-template-columns: 16px 70px 1fr auto; gap: 8px; align-items: center; padding: 3px 2px; }
 
 /* Буфер обмена / поиск */
-.search { display: flex; align-items: center; gap: 8px; padding: 4px 6px 4px 10px; border-radius: 10px; background: var(--surface); border: 1px solid var(--border); margin-bottom: 8px; }
+.search { display: flex; align-items: center; gap: 8px; padding: 4px 6px 4px 10px; border-radius: var(--r-btn, 10px); background: var(--surface); border: 1px solid var(--border); margin-bottom: 8px; }
 .search:focus-within { border-color: var(--accent); }
 .clip { cursor: default; }
 .clip-kind { width: 36px; display: inline-flex; justify-content: center; color: var(--text-muted); flex-shrink: 0; }
@@ -151,7 +207,7 @@
 
 /* Приложения */
 .apps-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
-.app-item { position: relative; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 10px 4px 8px; border-radius: 10px; cursor: pointer; transition: background 0.12s; }
+.app-item { position: relative; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 10px 4px 8px; border-radius: calc(var(--r-card, 14px) * 0.72); cursor: pointer; transition: background 0.12s; }
 .app-item:hover, .app-item.sel { background: var(--surface-hover); }
 .app-name { font-size: 11px; text-align: center; line-height: 1.2; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
 .fav { position: absolute; top: 4px; right: 4px; border: none; background: none; color: var(--text-muted); opacity: 0; cursor: pointer; padding: 2px; }
@@ -192,14 +248,14 @@
 .note-input:focus, .note-edit:focus { border-color: var(--accent); }
 .note-edit { width: 100%; min-height: 70px; background: rgba(0,0,0,0.25); }
 .notes-list { display: flex; flex-direction: column; gap: 6px; }
-.note-item { border-radius: 12px; padding: 8px 10px 4px; }
+.note-item { border-radius: calc(var(--r-card, 14px) * 0.86); padding: 8px 10px 4px; }
 .note-text { white-space: pre-wrap; word-break: break-word; cursor: text; line-height: 1.4; max-height: 120px; overflow: hidden; }
 .note-meta { display: flex; justify-content: space-between; align-items: center; margin-top: 4px; }
 .note-color { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--border); padding: 0; margin: 0 6px; cursor: pointer; }
 
 /* Полка */
 .shelf-drop {
-  display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 22px 12px; border-radius: 14px;
+  display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 22px 12px; border-radius: var(--r-card, 14px);
   border: 1.5px dashed var(--border); color: var(--text-muted); text-align: center; transition: all 0.2s;
 }
 .shelf-drop.over { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
@@ -299,7 +355,7 @@
 .notif-title { animation: notif-roll 0.32s cubic-bezier(0.22, 1, 0.36, 1) both; }
 @keyframes notif-roll { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
-.notif-group { border-radius: 12px; }
+.notif-group { border-radius: calc(var(--r-card, 14px) * 0.86); }
 .notif-group-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px; border: 0; border-radius: 12px; background: transparent; color: inherit; font: inherit; cursor: pointer; text-align: left; transition: background-color 0.14s cubic-bezier(0.22, 1, 0.36, 1); }
 .notif-group-head:hover { background: var(--surface-hover); }
 .notif-group-chev { color: var(--text-muted); transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1); flex-shrink: 0; }
@@ -352,7 +408,7 @@
 .island.is-strip { box-shadow: none; opacity: 0.85; }
 
 /* Помодоро в карточке таймеров */
-.pomo { border-radius: 16px; background: rgba(255, 255, 255, 0.05); padding: 12px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 10px; }
+.pomo { border-radius: calc(var(--r-card, 14px) * 1.14); background: rgba(255, 255, 255, 0.05); padding: 12px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 10px; }
 .pomo-top { display: flex; align-items: center; gap: 12px; }
 .pomo-time { font-family: "JetBrains Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; font-size: 26px; font-weight: 500; line-height: 1; }
 .pomo-phase { font-size: 12px; color: var(--text-muted); }
@@ -374,7 +430,7 @@
 .phone-chip.on { color: var(--text); background: color-mix(in srgb, var(--accent) 22%, transparent); }
 .phone-batt { display: inline-flex; align-items: center; gap: 3px; color: var(--text-muted); }
 
-.ocr-panel { margin: 8px 0; padding: 10px; border-radius: 12px; background: rgba(255, 255, 255, 0.06); display: flex; flex-direction: column; gap: 8px; animation: notif-roll 0.3s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.ocr-panel { margin: 8px 0; padding: 10px; border-radius: calc(var(--r-card, 14px) * 0.86); background: rgba(255, 255, 255, 0.06); display: flex; flex-direction: column; gap: 8px; animation: notif-roll 0.3s cubic-bezier(0.22, 1, 0.36, 1) both; }
 .ocr-text { max-height: 120px; font-size: 12.5px; line-height: 18px; white-space: pre-wrap; user-select: text; }
 
 /* ---- 1.1: администратор, вспышки клавиатуры и VPN, режим полёта, Steam ---- */
