@@ -54,6 +54,9 @@ pub async fn notification_remove(state: State<'_, Shared>, id: String) -> AppRes
 
 #[tauri::command]
 pub async fn notification_dismiss(state: State<'_, Shared>, id: String) -> AppResult<()> {
+    if let Some(n) = state.events.find(&id) {
+        crate::modules::phone::cancel_notification(state.inner(), &n.source);
+    }
     state.events.dismiss(&id);
     Ok(())
 }
@@ -616,6 +619,44 @@ pub async fn game_mode_foreground() -> AppResult<Option<ForegroundInfo>> {
 #[tauri::command]
 pub async fn phone_send_file(state: State<'_, Shared>, path: String) -> AppResult<()> {
     crate::modules::phone::PhoneModule::send_file(state.inner().clone(), std::path::PathBuf::from(path)).await
+}
+
+/// Выбрать файлы и отправить на телефон.
+#[tauri::command]
+pub async fn phone_pick_send(app: AppHandle, state: State<'_, Shared>) -> AppResult<u32> {
+    use tauri_plugin_dialog::DialogExt;
+    let picked = tauri::async_runtime::spawn_blocking(move || app.dialog().file().set_title("Отправить на телефон").blocking_pick_files()).await?;
+    let files: Vec<std::path::PathBuf> = picked.unwrap_or_default().into_iter().filter_map(|f| f.into_path().ok()).take(20).collect();
+    let n = files.len() as u32;
+    for f in files {
+        crate::modules::phone::PhoneModule::send_file(state.inner().clone(), f).await?;
+    }
+    Ok(n)
+}
+
+/// Текст из буфера обмена компьютера — на телефон.
+#[tauri::command]
+pub async fn phone_send_clipboard(state: State<'_, Shared>) -> AppResult<()> {
+    let text = blocking(|| arboard::Clipboard::new().and_then(|mut c| c.get_text()).map_err(|_| AppError::invalid("в буфере обмена нет текста"))).await?;
+    if text.trim().is_empty() {
+        return Err(AppError::invalid("в буфере обмена нет текста"));
+    }
+    crate::modules::phone::send_clipboard(state.inner(), &text)
+}
+
+#[tauri::command]
+pub async fn phone_sms_threads(state: State<'_, Shared>) -> AppResult<Vec<crate::modules::phone::SmsThread>> {
+    Ok(crate::modules::phone::sms_threads(state.inner()))
+}
+
+#[tauri::command]
+pub async fn phone_sms_thread(state: State<'_, Shared>, thread: String) -> AppResult<Vec<crate::modules::phone::Sms>> {
+    Ok(crate::modules::phone::sms_thread(state.inner(), &thread))
+}
+
+#[tauri::command]
+pub async fn phone_sms_send(state: State<'_, Shared>, address: String, text: String) -> AppResult<()> {
+    crate::modules::phone::sms_send(state.inner(), &address, &text)
 }
 
 // ---- календарь и помодоро ----

@@ -1,7 +1,7 @@
 // Компактное состояние: самая приоритетная активность (таймер, музыка, плагин) или часы.
 
 import { memo, useEffect } from "react";
-import { ArrowDownToLine, Battery, CalendarClock, Target, BatteryCharging, BellOff, Cpu, ExternalLink, Hourglass, Mic, MicOff, Music2, Phone, Plane, Puzzle, Rocket, ShieldCheck, ShieldOff, Timer as TimerIcon } from "lucide-react";
+import { ArrowDownToLine, Battery, CalendarClock, Target, BatteryCharging, BellOff, Cpu, ExternalLink, Hourglass, Mic, MicOff, Music2, Phone, Plane, Puzzle, Rocket, ShieldCheck, ShieldOff, Timer as TimerIcon, Sun, Volume1, Volume2, VolumeX } from "lucide-react";
 import { useNow } from "../hooks/common";
 import { currentLine, useLyrics } from "../hooks/useLyrics";
 import { ipc } from "../services/ipc";
@@ -317,8 +317,10 @@ export function CompactView({ top }: { top: Activity | null }) {
   const queued = useIsland((s) => s.notification.queued);
   const musicInCompact = useApp((s) => s.settings?.music.showInCompact);
   const greeting = useIsland((s) => s.greeting);
+  const osd = useIsland((s) => s.osd);
   let content;
   if (greeting) content = <Greeting text={greeting} />;
+  if (osd) content = <OsdView o={osd} />;
   else if (top?.id === "launch") content = <LaunchPulse activity={top} />;
   else if (top?.id === "flash") content = <FlashCompact activity={top} />;
   else if (top?.id === "call") content = <CallCompact activity={top} />;
@@ -361,6 +363,21 @@ export function CompactView({ top }: { top: Activity | null }) {
           {queued > 0 && <span className="badge">+{queued}</span>}
         </div>
       )}
+    </div>
+  );
+}
+
+/** Громкость или яркость вместо системной плашки Windows. */
+function OsdView({ o }: { o: import("../types").OsdPayload }) {
+  const Icon = o.kind === "brightness" ? Sun : o.muted || o.value === 0 ? VolumeX : o.value < 50 ? Volume1 : Volume2;
+  const value = o.kind === "volume" && o.muted ? 0 : o.value;
+  return (
+    <div className={`osd ${o.kind === "volume" && o.muted ? "muted" : ""}`} aria-live="polite">
+      <Icon size={17} />
+      <span className="osd-bar">
+        <i style={{ width: `${value}%` }} />
+      </span>
+      <span className="osd-val">{o.kind === "volume" && o.muted ? "Без звука" : `${o.value}`}</span>
     </div>
   );
 }

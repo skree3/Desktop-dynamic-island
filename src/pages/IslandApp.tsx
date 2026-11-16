@@ -10,7 +10,7 @@ import { useIsland } from "../stores/island";
 import { useMedia } from "../stores/media";
 import { useSys } from "../stores/sysmon";
 import { useTimers } from "../stores/timers";
-import type { Activity, GameModeState, MediaSession, NotificationPayload, PrivacyState, SysSnapshot, ThemeRow, Timer } from "../types";
+import type { Activity, GameModeState, MediaSession, NotificationPayload, PrivacyState, SysSnapshot, ThemeRow, Timer, OsdPayload } from "../types";
 import "../styles/island.css";
 import { greetingText, playVoice } from "../utils/voice";
 
@@ -39,6 +39,15 @@ export default function IslandApp() {
         window.clearTimeout(previewTimer);
         useApp.setState({ previewTheme: d ?? null });
         if (d) previewTimer = window.setTimeout(() => useApp.setState({ previewTheme: null }), 120_000);
+      }),
+    );
+    // Громкость и яркость: плашка держится 1,6 с после последнего нажатия.
+    let osdTimer: number | undefined;
+    unsubs.push(
+      on<OsdPayload>("island://osd", (o) => {
+        window.clearTimeout(osdTimer);
+        useIsland.getState().setOsd(o);
+        osdTimer = window.setTimeout(() => useIsland.getState().setOsd(null), 1600);
       }),
     );
     let greetTimer: number | undefined;

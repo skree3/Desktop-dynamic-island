@@ -268,7 +268,7 @@ impl NotificationsModule {
     pub fn action(&self, app: &AppHandle, st: &Shared, notification_id: &str, action_id: &str) -> crate::core::error::AppResult<()> {
         let n = st.events.find(notification_id).ok_or_else(|| crate::core::error::AppError::NotFound("уведомление не найдено".into()))?;
         match (n.kind.clone(), action_id) {
-            (_, "dismiss") => {}
+            (_, "dismiss") => crate::modules::phone::cancel_notification(st, &n.source),
             (NotificationKind::Timer, "restart") => {
                 if let Some(id) = n.source.strip_prefix("timer:") {
                     st.timers.start(st, id)?;

@@ -23,7 +23,15 @@ use crate::platform::types::{MediaAction, MediaSessionInfo};
 #[derive(Default)]
 pub struct MusicModule {
     task: TaskSlot,
+    /// Все сессии: компьютер + телефон.
     sessions: Mutex<Vec<MediaSessionInfo>>,
+    /// Только сессии компьютера (последний опрос системы).
+    os_sessions: Mutex<Vec<MediaSessionInfo>>,
+    /// Плееры телефона (KDE Connect) и их обложки (id → data URL).
+    phone: Mutex<Vec<MediaSessionInfo>>,
+    phone_art: Mutex<HashMap<String, String>>,
+    /// Ссылка на состояние приложения — для управления плеером телефона.
+    shared: std::sync::OnceLock<std::sync::Weak<crate::core::state::AppState>>,
     artwork: Mutex<HashMap<String, (String, Option<String>)>>,
     selected: Mutex<Option<String>>,
 }
@@ -120,7 +128,8 @@ impl MusicModule {
                 match tauri::async_runtime::spawn_blocking(os::media::list_sessions).await {
                     Ok(Ok(list)) => {
                         errors = 0;
-                        st.music.update(&st, list);
+                        *st.music.os_sessions.lock().unwrap_or_else(|p| p.into_inner()) = list;
+                        st.music.update(&st, st.music.merged());
                     }
                     Ok(Err(e)) => {
                         errors += 1;
@@ -136,6 +145,30 @@ impl MusicModule {
                 let _ = &app;
             }
         });
+    }
+
+    /// Сессии компьютера и телефона вместе.
+    fn merged(&self) -> Vec<MediaSessionInfo> {
+        let mut list = self.os_sessions.lock().unwrap_or_else(|p| p.into_inner()).clone();
+        list.extend(self.phone.lock().unwrap_or_else(|p| p.into_inner()).iter().cloned());
+        list
+    }
+
+    /// Плееры телефона изменились (вызывается модулем телефона).
+    pub fn set_phone_sessions(&self, st: &Shared, list: Vec<MediaSessionInfo>) {
+        let _ = self.shared.set(std::sync::Arc::downgrade(st));
+        {
+            let ids: Vec<&str> = list.iter().map(|s| s.id.as_str()).collect();
+            self.phone_art.lock().unwrap_or_else(|p| p.into_inner()).retain(|k, _| ids.contains(&k.as_str()));
+        }
+        *self.phone.lock().unwrap_or_else(|p| p.into_inner()) = list;
+        if self.task.is_running() {
+            self.update(st, self.merged());
+        }
+    }
+
+    pub fn set_phone_art(&self, id: &str, data_url: String) {
+        self.phone_art.lock().unwrap_or_else(|p| p.into_inner()).insert(id.to_string(), data_url);
     }
 
     fn update(&self, st: &Shared, list: Vec<MediaSessionInfo>) {
@@ -182,7 +215,9 @@ impl MusicModule {
         if self.task.is_running() {
             return Ok(self.sessions.lock().unwrap_or_else(|p| p.into_inner()).clone());
         }
-        tauri::async_runtime::spawn_blocking(os::media::list_sessions).await?
+        let mut list = tauri::async_runtime::spawn_blocking(os::media::list_sessions).await??;
+        list.extend(self.phone.lock().unwrap_or_else(|p| p.into_inner()).iter().cloned());
+        Ok(list)
     }
 
     pub fn select(&self, id: Option<String>) {
@@ -195,6 +230,10 @@ impl MusicModule {
                 return Err(AppError::invalid("громкость"));
             }
         }
+        if id.starts_with("phone:") {
+            let st = self.shared.get().and_then(|w| w.upgrade()).ok_or_else(|| AppError::NotFound("плеер телефона".into()))?;
+            return crate::modules::phone::media_control(&st, &id, &action);
+        }
         tauri::async_runtime::spawn_blocking(move || os::media::control(&id, &action)).await??;
         Ok(())
     }
@@ -206,6 +245,9 @@ impl MusicModule {
     }
 
     pub async fn artwork(&self, id: String) -> AppResult<Option<String>> {
+        if id.starts_with("phone:") {
+            return Ok(self.phone_art.lock().unwrap_or_else(|p| p.into_inner()).get(&id).cloned());
+        }
         let key = {
             let g = self.sessions.lock().unwrap_or_else(|p| p.into_inner());
             g.iter().find(|s| s.id == id).map(|s| s.artwork_key.clone())

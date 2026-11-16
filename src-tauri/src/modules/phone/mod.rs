@@ -36,6 +36,13 @@ const INCOMING: &[&str] = &[
     "kdeconnect.clipboard.connect",
     "kdeconnect.share.request",
     "kdeconnect.findmyphone.request",
+    "kdeconnect.sms.messages",
+    "kdeconnect.contacts.response_uids_timestamps",
+    "kdeconnect.contacts.response_vcards",
+    "kdeconnect.mpris",
+    "kdeconnect.runcommand.request",
+    "kdeconnect.mousepad.request",
+    "kdeconnect.presenter",
 ];
 const OUTGOING: &[&str] = &[
     "kdeconnect.ping",
@@ -46,6 +53,15 @@ const OUTGOING: &[&str] = &[
     "kdeconnect.findmyphone.request",
     "kdeconnect.notification.reply",
     "kdeconnect.share.request",
+    "kdeconnect.notification.request",
+    "kdeconnect.sms.request",
+    "kdeconnect.sms.request_conversations",
+    "kdeconnect.sms.request_conversation",
+    "kdeconnect.contacts.request_all_uids_timestamps",
+    "kdeconnect.contacts.request_vcards_by_uid",
+    "kdeconnect.mpris.request",
+    "kdeconnect.runcommand",
+    "kdeconnect.mousepad.keyboardstate",
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -99,7 +115,12 @@ struct Inner {
 pub struct PhoneModule {
     task: TaskSlot,
     inner: Mutex<Inner>,
+    /// SMS, музыка телефона и прочее (см. extra.rs).
+    extra: Mutex<extra::State>,
 }
+
+mod extra;
+pub use extra::{cancel_notification, media_control, send_clipboard, sms_send, sms_thread, sms_threads, sync_commands, Sms, SmsThread};
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -244,7 +265,7 @@ impl PhoneModule {
         st.events.emit(EVENT, self.status(st));
     }
 
-    fn send(&self, id: &str, line: String) -> bool {
+    pub(crate) fn send(&self, id: &str, line: String) -> bool {
         let g = self.lock();
         match g.devices.get(id).and_then(|d| d.link.as_ref()) {
             Some((_, tx)) => tx.send(line).is_ok(),
@@ -373,6 +394,7 @@ impl PhoneModule {
         st.log.info(category::INTEGRATION, "phone", format!("телефон «{line}» сопряжён"));
         st.events.push(crate::events::internal_notification("phone", "Телефон", format!("{line} подключён"), "Уведомления, звонки и буфер обмена теперь в острове", Priority::Normal));
         self.send(id, packet("kdeconnect.battery.request", json!({ "request": true })));
+        extra::on_linked(st, id);
     }
 
     /// Текст скопирован на компьютере — отправляем на сопряжённые телефоны.
@@ -562,6 +584,7 @@ where
     st.phone.emit(&st);
     if paired {
         let _ = tx.send(packet("kdeconnect.battery.request", json!({ "request": true })));
+        extra::on_linked(&st, &id);
     }
     let (read, mut write) = tokio::io::split(stream);
     let writer = tauri::async_runtime::spawn(async move {
@@ -578,6 +601,7 @@ where
         }
     }
     writer.abort();
+    extra::on_unlinked(&st, &id);
     {
         let mut g = st.phone.lock();
         if let Some(d) = g.devices.get_mut(&id) {
@@ -808,7 +832,9 @@ fn handle_packet(st: &Shared, id: &str, v: &Value) {
                 }
             }
         }
-        _ => {}
+        _ => {
+            extra::handle(st, id, &name, kind, &body, v);
+        }
     }
 }
 

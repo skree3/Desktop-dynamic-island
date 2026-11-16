@@ -1,12 +1,49 @@
 // Связь с телефоном (протокол KDE Connect): устройства, сопряжение, что передавать.
 
-import { BatteryCharging, BatteryMedium, BellRing, Smartphone } from "lucide-react";
-import { Button, Note, Toggle } from "../../components/ui";
+import { useState } from "react";
+import { BatteryCharging, BatteryMedium, BellRing, Plus, Smartphone, Trash2 } from "lucide-react";
+import { Button, IconButton, Note, Toggle } from "../../components/ui";
 import { useAction, useEvent, useLoad } from "../../hooks/common";
 import { ipc } from "../../services/ipc";
 import { useApp } from "../../stores/app";
 import type { PhoneDevice, PhoneStatus } from "../../types";
 import { Field, Group, Page } from "../components";
+
+/** Свои команды: название и что открыть (программа, файл или сайт). */
+function CustomCommands({ list, onChange }: { list: { name: string; target: string }[]; onChange: (v: { name: string; target: string }[]) => void }) {
+  const [name, setName] = useState("");
+  const [target, setTarget] = useState("");
+  const add = () => {
+    if (!name.trim() || !target.trim()) return;
+    onChange([...list, { name: name.trim(), target: target.trim() }]);
+    setName("");
+    setTarget("");
+  };
+  return (
+    <div className="field wide">
+      <div className="field-text" style={{ width: "100%" }}>
+        <div className="field-label">Свои команды</div>
+        <div className="field-desc">Открыть программу, файл или сайт одной кнопкой на телефоне</div>
+        {list.map((c, i) => (
+          <div key={i} className="row gap" style={{ marginTop: 8 }}>
+            <b style={{ minWidth: 140 }}>{c.name}</b>
+            <span className="grow small muted ellipsis">{c.target}</span>
+            <IconButton size="sm" title="Удалить команду" onClick={() => onChange(list.filter((_, j) => j !== i))}>
+              <Trash2 size={13} />
+            </IconButton>
+          </div>
+        ))}
+        <div className="row gap" style={{ marginTop: 10 }}>
+          <input className="input" style={{ width: 160 }} placeholder="Название" value={name} maxLength={40} onChange={(e) => setName(e.target.value)} />
+          <input className="input grow" placeholder="Путь к программе или https://…" value={target} maxLength={500} onChange={(e) => setTarget(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
+          <Button disabled={!name.trim() || !target.trim()} onClick={add}>
+            <Plus size={14} /> Добавить
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function DeviceRow({ d }: { d: PhoneDevice }) {
   const { error, run } = useAction();
@@ -104,6 +141,27 @@ export function PhoneSection() {
           <Field label="Низкий заряд" description="Предупреждение в острове, когда телефон разряжается">
             <Toggle checked={p.battery} onChange={(battery) => set({ battery })} />
           </Field>
+          <Field label="Закрывать уведомления и на телефоне" description="Закрыли уведомление в острове — оно пропадает и из шторки телефона">
+            <Toggle checked={p.syncDismiss ?? true} onChange={(syncDismiss) => set({ syncDismiss })} />
+          </Field>
+          <Field label="SMS" description="Переписка с телефона и ответы с компьютера — в карточке «Телефон». На телефоне разрешите KDE Connect доступ к SMS и контактам">
+            <Toggle checked={p.sms ?? true} onChange={(sms) => set({ sms })} />
+          </Field>
+          <Field label="Музыка с телефона" description="Что играет на телефоне — в острове, с обложкой и кнопками">
+            <Toggle checked={p.music ?? true} onChange={(music) => set({ music })} />
+          </Field>
+        </Group>
+      )}
+
+      {p.enabled && (
+        <Group title="Телефон управляет компьютером">
+          <Field label="Тачпад, клавиатура и пульт для презентаций" description="В KDE Connect на телефоне: «Удалённый ввод» и «Презентация»">
+            <Toggle checked={p.remoteInput ?? true} onChange={(remoteInput) => set({ remoteInput })} />
+          </Field>
+          <Field label="Кнопки-команды" description="В KDE Connect на телефоне: «Выполнить команду» — заблокировать ПК, сон, выключить экран, звук, музыка, «Не беспокоить», показать остров">
+            <Toggle checked={p.commands ?? true} onChange={(commands) => set({ commands })} />
+          </Field>
+          {(p.commands ?? true) && <CustomCommands list={p.customCommands ?? []} onChange={(customCommands) => set({ customCommands })} />}
         </Group>
       )}
 

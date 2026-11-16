@@ -25,6 +25,7 @@ pub mod timers;
 pub mod updater;
 pub mod indicators;
 pub mod steam;
+pub mod osd;
 pub mod assets;
 
 use serde::Serialize;
@@ -34,7 +35,7 @@ use crate::core::state::Shared;
 use crate::database::repo::WidgetSetting;
 
 /// Карточки, видимые в панели по умолчанию (остальные включаются в настройках).
-pub const DEFAULT_VISIBLE: &[&str] = &["music", "quick", "timers", "notifications", "notes", "shelf"];
+pub const DEFAULT_VISIBLE: &[&str] = &["music", "quick", "timers", "notifications", "notes", "shelf", "phone"];
 
 /// Встроенные карточки: (id, название, модуль, приоритет по умолчанию).
 pub const CARDS: &[(&str, &str, &str, i64)] = &[
@@ -50,6 +51,7 @@ pub const CARDS: &[(&str, &str, &str, i64)] = &[
     ("apps", "Приложения", "applications", 1),
     ("ai", "Нейросети", "ai", 1),
     ("integrations", "Интеграции", "integrations", 1),
+    ("phone", "Телефон", "phone", 1),
 ];
 
 #[derive(Debug, Clone, Serialize)]
@@ -90,7 +92,8 @@ pub fn list_cards(st: &Shared) -> Vec<CardInfo> {
             id: id.to_string(),
             title: title.to_string(),
             module: module.to_string(),
-            module_enabled: s.modules.is_enabled(module),
+            // Карточка телефона следует настройке «Связь с телефоном».
+            module_enabled: if *module == "phone" { s.phone.enabled } else { s.modules.is_enabled(module) },
             enabled: w.map(|w| w.enabled).unwrap_or(true),
             sort_order: w.map(|w| w.sort_order).unwrap_or(i as i64),
             priority: w.map(|w| w.priority).unwrap_or(*prio),
@@ -141,4 +144,6 @@ pub fn reconcile(app: &AppHandle, st: &Shared) {
     st.updater.set_running(app, st, s.general.check_updates);
     st.indicators.set_running(app, st, true);
     st.steam.set_running(st, s.modules.steam);
+    st.osd.set(st, s.appearance.osd_volume, s.appearance.osd_brightness);
+    phone::sync_commands(st);
 }

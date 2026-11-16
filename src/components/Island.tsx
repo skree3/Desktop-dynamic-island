@@ -110,6 +110,7 @@ export function Island() {
   const top = pickCompact(activities);
   const greeting = useIsland((s) => s.greeting);
   const strip = useIsland((s) => s.strip);
+  const osd = useIsland((s) => s.osd);
   const wide = !!greeting || (!!top && (top.kind === "music" ? settings.music.showInCompact : true));
 
   const size = useMemo(() => {
@@ -120,11 +121,13 @@ export function Island() {
       const stackLines = Math.min(2, notification.stack?.length ?? 0);
       return { w: 360 * scale, h: ((notification.actions.length ? 104 : 76) + stackLines * 17) * scale };
     }
+    // Громкость / яркость: широкая пилюля с полоской.
+    if (osd) return { w: 280 * scale, h: (COMPACT_H + 6) * scale };
     // Полноэкранное видео: тонкая полоска, по наведению — обычный остров.
     if (strip && !hovered && !greeting) return { w: 96 * scale, h: 6 * scale };
     const w = (wide ? 280 : settings.systemMonitor.showInCompact ? 244 : 200) * scale;
     return hovered ? { w: w + 12 * scale, h: (COMPACT_H + 2) * scale } : { w, h: COMPACT_H * scale };
-  }, [mode, contentH, notification, wide, hovered, scale, settings.systemMonitor.showInCompact, strip, greeting]);
+  }, [mode, contentH, notification, wide, hovered, scale, settings.systemMonitor.showInCompact, strip, greeting, osd]);
 
   // Овальная форма: в свёрнутом виде — полная «пилюля», раскрытый остров — крупные скругления.
   const kbdNotice = mode === "notification" && notification?.source === "kbd";
@@ -183,12 +186,14 @@ export function Island() {
     const un = listen<{ state: "enter" | "leave" | "drop"; added?: number }>("shelf://drag", (e) => {
       const st = useIsland.getState();
       const s = e.payload.state;
+      // Открыта карточка телефона — файлы уйдут на телефон, полку не открываем.
+      const toPhone = st.mode === "expanded" && st.activeCard === "phone";
       if (s === "enter") {
         st.setDragging(true);
-        st.expand("shelf");
+        if (!toPhone) st.expand("shelf");
       } else if (s === "drop") {
         st.setDragging(false);
-        if (st.mode !== "expanded" || st.activeCard !== "shelf") st.expand("shelf");
+        if (!toPhone && (st.mode !== "expanded" || st.activeCard !== "shelf")) st.expand("shelf");
       } else {
         st.setDragging(false);
       }
@@ -267,7 +272,7 @@ export function Island() {
   return (
     <div className="island-root" style={{ paddingLeft: SIDE, paddingRight: SIDE }}>
       <motion.div
-        className={`island mode-${mode} style-${islandStyle} ${attached ? "attached" : "floating"} tone-${settings.appearance.islandTone ?? "graphite"} ${strip && !hovered && mode === "compact" && !greeting ? "is-strip" : ""}`}
+        className={`island mode-${mode} style-${islandStyle} ${attached ? "attached" : "floating"} tone-${settings.appearance.islandTone ?? "graphite"} ${strip && !hovered && mode === "compact" && !greeting && !osd ? "is-strip" : ""}`}
         initial={false}
         animate={{
           width: size.w,

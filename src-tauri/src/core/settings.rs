@@ -68,6 +68,10 @@ pub struct AppearanceSettings {
     pub island_style: String,
     /// В редакторе своих тем доступен подбор цветов из картинки (выключено по умолчанию).
     pub theme_from_image: bool,
+    /// Громкость в острове вместо плашки Windows (клавиши громкости обрабатывает остров).
+    pub osd_volume: bool,
+    /// Яркость в острове (системная плашка яркости при этом остаётся).
+    pub osd_brightness: bool,
 }
 impl Default for AppearanceSettings {
     fn default() -> Self {
@@ -92,6 +96,8 @@ impl Default for AppearanceSettings {
             font: "system".into(),
             island_style: "solid".into(),
             theme_from_image: false,
+            osd_volume: true,
+            osd_brightness: true,
         }
     }
 }
@@ -392,10 +398,49 @@ pub struct PhoneSettings {
     pub clipboard: bool,
     pub battery: bool,
     pub media: bool,
+    /// SMS: переписка и ответы с компьютера.
+    pub sms: bool,
+    /// Музыка с телефона в острове.
+    pub music: bool,
+    /// Телефон управляет мышью и клавиатурой (тачпад, пульт для презентаций).
+    pub remote_input: bool,
+    /// Кнопки-команды на телефоне (заблокировать ПК, сон, звук…).
+    pub commands: bool,
+    /// Свои команды: открыть программу, файл или сайт.
+    pub custom_commands: Vec<PhoneCommand>,
+    /// Закрыл уведомление на компьютере — оно исчезает и на телефоне.
+    pub sync_dismiss: bool,
 }
 impl Default for PhoneSettings {
     fn default() -> Self {
-        Self { enabled: true, device_name: String::new(), notifications: true, calls: true, clipboard: true, battery: true, media: false }
+        Self {
+            enabled: true,
+            device_name: String::new(),
+            notifications: true,
+            calls: true,
+            clipboard: true,
+            battery: true,
+            media: false,
+            sms: true,
+            music: true,
+            remote_input: true,
+            commands: true,
+            custom_commands: Vec::new(),
+            sync_dismiss: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default, rename_all = "camelCase")]
+pub struct PhoneCommand {
+    pub name: String,
+    /// Путь к программе/файлу или ссылка https://.
+    pub target: String,
+}
+impl Default for PhoneCommand {
+    fn default() -> Self {
+        Self { name: String::new(), target: String::new() }
     }
 }
 
@@ -700,6 +745,13 @@ impl Settings {
         p.long_min = p.long_min.clamp(1, 120);
         p.cycles = p.cycles.clamp(1, 12);
         self.phone.device_name = self.phone.device_name.trim().chars().filter(|c| !c.is_control()).take(48).collect();
+        // Свои команды для телефона: имя и цель без управляющих символов, не больше 20.
+        self.phone.custom_commands.truncate(20);
+        for c in &mut self.phone.custom_commands {
+            c.name = c.name.trim().chars().filter(|x| !x.is_control()).take(40).collect();
+            c.target = c.target.trim().chars().filter(|x| !x.is_control()).take(500).collect();
+        }
+        self.phone.custom_commands.retain(|c| !c.name.is_empty() && !c.target.is_empty());
 
         for p in self.position.placements.values_mut() {
             if !p.rel_x.is_finite() {

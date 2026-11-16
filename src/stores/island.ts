@@ -29,6 +29,9 @@ interface IslandStore {
   /** Приветствие, показываемое в свёрнутом острове несколько секунд. */
   greeting: string | null;
   setGreeting: (g: string | null) => void;
+  /** Громкость или яркость, только что изменённые клавишами. */
+  osd: import("../types").OsdPayload | null;
+  setOsd: (o: import("../types").OsdPayload | null) => void;
   /** Полноэкранное приложение — остров сжат в тонкую полоску. */
   strip: boolean;
   setStrip: (s: boolean) => void;
@@ -56,6 +59,8 @@ export const useIsland = create<IslandStore>((set, get) => ({
   privacy: { microphone: [], camera: [], micMuted: null },
   greeting: null,
   setGreeting: (greeting) => set({ greeting }),
+  osd: null,
+  setOsd: (osd) => set({ osd }),
   strip: false,
   setStrip: (strip) => set({ strip }),
 

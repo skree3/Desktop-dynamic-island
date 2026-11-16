@@ -76,6 +76,12 @@ export function AppearanceSection() {
             ]}
           />
         </Field>
+        <Field label="Громкость в острове" description="Клавиши громкости показывают уровень в острове, а плашка Windows больше не появляется">
+          <Toggle checked={a.osdVolume ?? true} label="Громкость в острове" onChange={(osdVolume) => set({ osdVolume })} />
+        </Field>
+        <Field label="Яркость в острове" description="Уровень яркости в острове. Плашку яркости Windows скрыть нельзя: клавиши яркости обрабатывает драйвер ноутбука">
+          <Toggle checked={a.osdBrightness ?? true} label="Яркость в острове" onChange={(osdBrightness) => set({ osdBrightness })} />
+        </Field>
         <Field label="Цвет острова">
           <Segmented
             value={a.islandTone ?? "graphite"}

@@ -87,6 +87,10 @@ impl EventManager {
         })
     }
 
+    pub fn app_handle(&self) -> Option<AppHandle> {
+        self.app.get().cloned()
+    }
+
     pub fn attach(&self, app: AppHandle) {
         let _ = self.app.set(app);
     }

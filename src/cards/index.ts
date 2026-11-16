@@ -15,6 +15,7 @@ import {
   StickyNote,
   Inbox,
   SlidersHorizontal,
+  Smartphone,
   Timer as TimerIcon,
   type LucideIcon,
 } from "lucide-react";
@@ -42,6 +43,7 @@ export const CARD_META: Record<string, CardMeta> = {
   integrations: { icon: Plug, component: lazy(() => import("./IntegrationsCard")) },
   notes: { icon: StickyNote, component: lazy(() => import("./NotesCard")) },
   shelf: { icon: Inbox, component: lazy(() => import("./ShelfCard")) },
+  phone: { icon: Smartphone, component: lazy(() => import("./PhoneCard")) },
 };
 
 export const PLUGIN_META: CardMeta = { icon: Puzzle, component: lazy(() => import("./PluginCard")) };

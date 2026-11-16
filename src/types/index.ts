@@ -51,6 +51,38 @@ export interface PhoneSettings {
   clipboard: boolean;
   battery: boolean;
   media: boolean;
+  sms: boolean;
+  music: boolean;
+  remoteInput: boolean;
+  commands: boolean;
+  customCommands: { name: string; target: string }[];
+  syncDismiss: boolean;
+}
+
+export interface SmsThread {
+  thread: string;
+  address: string;
+  name: string;
+  last: string;
+  date: number;
+  unread: boolean;
+  outgoing: boolean;
+}
+
+export interface Sms {
+  id: number;
+  thread: string;
+  address: string;
+  body: string;
+  date: number;
+  outgoing: boolean;
+  read: boolean;
+}
+
+export interface OsdPayload {
+  kind: "volume" | "brightness";
+  value: number;
+  muted: boolean;
 }
 
 export interface Settings {
@@ -76,6 +108,8 @@ export interface Settings {
     font: string;
     islandStyle: IslandStyle;
     themeFromImage: boolean;
+    osdVolume: boolean;
+    osdBrightness: boolean;
   };
   position: { monitor: string | null; placements: Record<string, Placement>; locked: boolean; style: "edge" | "float" };
   modules: Record<ModuleId, boolean>;
